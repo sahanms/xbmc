@@ -6286,6 +6286,44 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
   const CUrlOptions::UrlOptions& options = musicUrl.GetOptions();
   CUrlOptions::UrlOptions::const_iterator option;
 
+  bool hasxsp = false;
+  std::string xspRoleClause;
+
+  //Check playlist rules first as effects how role filter is used
+  option = options.find("xsp");
+  if (option != options.end())
+  {
+    CSmartPlaylist xsp;
+    if (!xsp.LoadFromJson(option->second.asString()))
+      return false;
+
+    // check if the filter playlist matches the item type
+    if (xsp.GetType() == type ||
+      (xsp.GetGroup() == type && !xsp.IsGroupMixed()))
+    {
+      std::set<std::string> playlists;
+      std::string xspWhere = xsp.GetWhereClause(*this, playlists);
+      filter.AppendWhere(xspWhere);
+      hasxsp = true; 
+      if (type == "artists")
+      {        
+        // Standard artists node clause construction later is skipped (to avoid role conflicts)
+        // so remove the null string and various artist entry, rest of where clause created by playlist
+        std::string strVariousArtists = g_localizeStrings.Get(340);
+        filter.AppendWhere(PrepareSQL("artistview.strArtist != '' AND artistview.strArtist <> '%s'", strVariousArtists.c_str()));
+      }
+
+      if (xsp.GetLimit() > 0)
+        sorting.limitEnd = xsp.GetLimit();
+      if (xsp.GetOrder() != SortByNone)
+        sorting.sortBy = xsp.GetOrder();
+      sorting.sortOrder = xsp.GetOrderAscending() ? SortOrderAscending : SortOrderDescending;
+      if (CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
+        sorting.sortAttributes = SortAttributeIgnoreArticle;
+    }
+  }
+
+
   //Process role options, common to artist and album type filtering
   int idRole = 1; // Default restrict song_artist to "artists" only, no other roles.
   option = options.find("roleid");
@@ -6306,7 +6344,7 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
   std::string strRoleSQL; //Role < 0 means all roles, otherwise filter by role
   if(idRole > 0) strRoleSQL = PrepareSQL(" AND song_artist.idRole = %i ", idRole);  
 
-  if (type == "artists")
+  if (type == "artists" && !hasxsp)
   {
     int idArtist = -1, idGenre = -1, idAlbum = -1, idSong = -1;
     bool albumArtistsOnly = false;
@@ -6515,40 +6553,7 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
         option->second.asString().c_str(), strRoleSQL.c_str(), option->second.asString().c_str()));
   }
 
-  option = options.find("xsp");
-  if (option != options.end())
-  {
-    CSmartPlaylist xsp;
-    if (!xsp.LoadFromJson(option->second.asString()))
-      return false;
-
-    // check if the filter playlist matches the item type
-    if (xsp.GetType()  == type ||
-       (xsp.GetGroup() == type && !xsp.IsGroupMixed()))
-    {
-      std::set<std::string> playlists;
-      std::string xspWhere = xsp.GetWhereClause(*this, playlists);
-      // When "artists" type playlist rules include role, need to avoid any conflict with default role = 1 filter clause.
-      // The song_artist clause is provided by the playlist and album artists only setting is over ruled
-      if (type == "artists" && xspWhere.find("song_artist.idRole = role.idRole") != xspWhere.npos)
-      {
-        filter.where.clear();
-        // remove the null string and various artist entry
-        std::string strVariousArtists = g_localizeStrings.Get(340);
-        filter.AppendWhere(PrepareSQL("artistview.strArtist != '' AND artistview.strArtist <> '%s'", strVariousArtists.c_str()));
-      }
-      filter.AppendWhere(xspWhere);
-
-      if (xsp.GetLimit() > 0)
-        sorting.limitEnd = xsp.GetLimit();
-      if (xsp.GetOrder() != SortByNone)
-        sorting.sortBy = xsp.GetOrder();
-      sorting.sortOrder = xsp.GetOrderAscending() ? SortOrderAscending : SortOrderDescending;
-      if (CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
-        sorting.sortAttributes = SortAttributeIgnoreArticle;
-    }
-  }
-
+  
   option = options.find("filter");
   if (option != options.end())
   {

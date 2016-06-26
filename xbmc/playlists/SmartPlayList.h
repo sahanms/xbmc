@@ -93,6 +93,11 @@ public:
                          std::vector<std::string> &virtualFolders) const;
 
   void AddRule(const CSmartPlaylistRule &rule);
+  
+  std::string GetComplexClause(const CDatabase &db, const std::string& strType) const;
+  std::string GetCommonClause(const CDatabase &db, const std::string& strType) const;
+  bool IsComplexRule(const int field) const;  
+  bool HasComplexRules(const std::string& strType) const;
 };
 
 class CSmartPlaylist : public IDatabaseQueryRuleFactory
@@ -165,6 +170,7 @@ public:
   // rule creation
   virtual CDatabaseQueryRule *CreateRule() const;
   virtual CDatabaseQueryRuleCombination *CreateCombination() const;
+
 private:
   friend class CGUIDialogSmartPlaylistEditor;
   friend class CGUIDialogMediaFilter;
