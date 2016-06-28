@@ -6321,6 +6321,14 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
       if (CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
         sorting.sortAttributes = SortAttributeIgnoreArticle;
     }
+    else
+    {
+      // Construct role clause from any "artists" playlist role rules
+      if (xsp.GetType() == "artists")
+      {//only takes "albums" at the moment
+        xspRoleClause = xsp.GetChildWhereClause(*this, "albums");
+      }
+    }
   }
 
 
@@ -6340,7 +6348,10 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
         idRole = GetRoleByName(option->second.asString());
     }
   }
-  
+
+  if (!xspRoleClause.empty())
+    idRole = -1000;
+
   std::string strRoleSQL; //Role < 0 means all roles, otherwise filter by role
   if(idRole > 0) strRoleSQL = PrepareSQL(" AND song_artist.idRole = %i ", idRole);  
 
@@ -6472,8 +6483,14 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
 
     option = options.find("artistid");
     if (option != options.end())
-    {
+    {      
       int idArtist = (int)option->second.asInteger();
+      if (!xspRoleClause.empty())
+      {
+        StringUtils::Replace(xspRoleClause, "artistview.idArtist", std::to_string(idArtist));
+        filter.AppendWhere(xspRoleClause);
+      }
+      else
       filter.AppendWhere(PrepareSQL(
       "(EXISTS (SELECT 1 FROM song JOIN song_artist ON song.idSong = song_artist.idSong"
       " WHERE song.idAlbum = albumview.idAlbum AND song_artist.idArtist = %i %s) OR "

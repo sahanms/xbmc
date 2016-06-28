@@ -93,11 +93,41 @@ public:
                          std::vector<std::string> &virtualFolders) const;
 
   void AddRule(const CSmartPlaylistRule &rule);
-  
-  std::string GetComplexClause(const CDatabase &db, const std::string& strType) const;
+  bool SongRulesOnly();
+
+  std::string GetChildClause(const CDatabase &db, const std::string& strType) const;
+  std::string GetArtistSongClause(const CDatabase &db, const std::string& strType) const;
   std::string GetCommonClause(const CDatabase &db, const std::string& strType) const;
-  bool IsComplexRule(const int field) const;  
-  bool HasComplexRules(const std::string& strType) const;
+  bool IsComplexRule(const std::string& strType, const int field) const;
+};
+
+class CSmartPlaylistWhereClause
+{
+public:
+  CSmartPlaylistWhereClause() { m_count = 0; }
+  std::string GetWhereClause() const;
+  void SetFirstFrom(const std::string strFrom) { m_strFirstFrom = strFrom; }
+  void SetFirstWhere(const std::string strWhere) { m_strFirstWhere = strWhere; }
+  void SetORWhere(const std::string strWhere) { m_strOrWhere = strWhere; }
+  void SetRuleFromFormat(const std::string strFrom) { m_strRuleFromFmt = strFrom; }
+  void SetRuleWhereFormat2(const std::string strWhere) { m_strRuleWhereFmt2 = strWhere; }
+  void SetRuleWhereFormat3(const std::string strWhere) { m_strRuleWhereFmt3 = strWhere; }
+  void SetCombination(const bool isAnd) { m_combinationAND = isAnd; }
+  void AddRule(const std::string negate, const std::string strParameter);
+  bool IsEmpty();
+
+private:
+  int m_count;
+  bool m_combinationAND;
+  std::string m_strFrom;
+  std::string m_strWhere;
+
+  std::string m_strFirstFrom;
+  std::string m_strFirstWhere;
+  std::string m_strOrWhere;
+  std::string m_strRuleFromFmt;
+  std::string m_strRuleWhereFmt2;
+  std::string m_strRuleWhereFmt3;
 };
 
 class CSmartPlaylist : public IDatabaseQueryRuleFactory
@@ -171,6 +201,7 @@ public:
   virtual CDatabaseQueryRule *CreateRule() const;
   virtual CDatabaseQueryRuleCombination *CreateCombination() const;
 
+  std::string GetChildWhereClause(const CDatabase &db, const std::string &type) const;
 private:
   friend class CGUIDialogSmartPlaylistEditor;
   friend class CGUIDialogMediaFilter;
