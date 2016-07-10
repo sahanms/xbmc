@@ -94,12 +94,11 @@ public:
 
   void AddRule(const CSmartPlaylistRule &rule);
 
-  bool HasRoleRules() const;
-  bool HasArtistSongRules(std::set<std::string> &referencedPlaylists) const;
+  bool HasRuleFields(const std::vector<int> &rulefields, std::set<std::string> &referencedPlaylists) const;
   std::string GetArtistSongClause(const CDatabase &db, 
                                   const std::string& strType, 
                                   std::set<std::string> &referencedPlaylists) const;
-  bool IsComplexRule(const std::string& strType, const int field) const;
+  bool IsArtistSongRule(const int field) const;
 };
 
 class CSmartPlaylist : public IDatabaseQueryRuleFactory
@@ -173,11 +172,11 @@ public:
   virtual CDatabaseQueryRule *CreateRule() const;
   virtual CDatabaseQueryRuleCombination *CreateCombination() const;
 
-  std::string GetSongRulesClause(const CDatabase &db, const std::string &type) const;
-  std::string GetArtistSongClause(const CDatabase &db, std::set<std::string> &referencedPlaylists) const;
-  bool HasRoleRules() const;
-  bool HasArtistSongRules(std::set<std::string> &referencedPlaylists) const;
   bool HasArtistSongRules() const;
+  std::string GetSongRulesClause(const CDatabase &db, const std::string &type) const;
+  bool HasRuleFields(const std::vector<int> &rulefields, std::set<std::string> &referencedPlaylists) const;
+  std::string GetArtistSongClause(const CDatabase &db, std::set<std::string> &referencedPlaylists) const;
+
 private:
   friend class CGUIDialogSmartPlaylistEditor;
   friend class CGUIDialogMediaFilter;

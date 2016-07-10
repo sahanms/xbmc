@@ -30,7 +30,6 @@
 #include "filesystem/File.h"
 #include "filesystem/SmartPlaylistDirectory.h"
 #include "guilib/LocalizeStrings.h"
-#include "settings/Settings.h"
 #include "utils/DatabaseUtils.h"
 #include "utils/JSONVariantParser.h"
 #include "utils/JSONVariantWriter.h"
@@ -956,10 +955,9 @@ std::string CSmartPlaylistRuleCombination::GetWhereClause(const CDatabase &db, c
     if ((*it)->m_field == FieldVirtualFolder)
       continue;
     
-    //Skip those rules that need a combined SQL clause
-    //e.g. "artists" list genre, path or role rules that are related to song data
-    //They will be dealt with separately
-    if (IsComplexRule(strType, (*it)->m_field))
+    // Skip those rules that need a combined SQL clause e.g. "artists" playlist genre, path or role rules 
+    // that are related to song data, they will be dealt with separately
+    if (strType == "artists" && IsArtistSongRule((*it)->m_field))
       continue;
 
     if (!rule.empty())
@@ -1055,11 +1053,11 @@ void CSmartPlaylistRuleCombination::AddRule(const CSmartPlaylistRule &rule)
   m_rules.push_back(ptr);
 }
 
-bool CSmartPlaylistRuleCombination::IsComplexRule(const std::string& strType, const int field) const
+bool CSmartPlaylistRuleCombination::IsArtistSongRule(const int field) const
 {
   // The SQL clauses for some rules are interdependent and can not be implemented in isolation
   // e.g. the song related rules on "artists" playlists involving genre, path and/or role fields
-  return strType == "artists" && (field == FieldGenre || field == FieldPath || field == FieldRole);
+  return (field == FieldGenre || field == FieldPath || field == FieldRole);
 }
 
 std::string CSmartPlaylistRuleCombination::GetArtistSongClause(const CDatabase &db, const std::string& strType, std::set<std::string> &referencedPlaylists) const
@@ -1233,22 +1231,14 @@ std::string CSmartPlaylistRuleCombination::GetArtistSongClause(const CDatabase &
   return "(" + currentRule + ")";
 }
 
-bool CSmartPlaylistRuleCombination::HasRoleRules() const
+bool CSmartPlaylistRuleCombination::HasRuleFields(const std::vector<int> &rulefields, std::set<std::string> &referencedPlaylists) const
 {
+  // Check if this rule combination, or any playlists in the rules, have rules with any of these fields.
+  // A set of referenced playlists is used to to ensure we don't introduce infinite loops when dealing 
+  // with handle playlists inside playlists e.g. playlist A including playlist B which also(perhaps 
+  // via other playlists) then includes playlistA.
   for (CDatabaseQueryRules::const_iterator it = m_rules.begin(); it != m_rules.end(); ++it)
-    if ((*it)->m_field == FieldRole)
-      return true;
-
-  return false;
-}
-
-bool CSmartPlaylistRuleCombination::HasArtistSongRules(std::set<std::string> &referencedPlaylists) const
-{
-  for (CDatabaseQueryRules::const_iterator it = m_rules.begin(); it != m_rules.end(); ++it)
-  {
-    if ((*it)->m_field == FieldGenre || (*it)->m_field == FieldPath || (*it)->m_field == FieldRole)
-      return true;
-
+  {    
     if ((*it)->m_field == FieldPlaylist)
     {
       std::string playlistFile = CSmartPlaylistDirectory::GetPlaylistByName((*it)->m_parameter.at(0), "artists");
@@ -1258,11 +1248,14 @@ bool CSmartPlaylistRuleCombination::HasArtistSongRules(std::set<std::string> &re
         CSmartPlaylist playlist;
         if (playlist.Load(playlistFile))
         {
-          if (playlist.HasArtistSongRules(referencedPlaylists))
+          if (playlist.HasRuleFields(rulefields, referencedPlaylists))
             return true;
         }
       }
     }
+    else
+      if (std::find(rulefields.begin(), rulefields.end(), (*it)->m_field) != rulefields.end())
+        return true;
   }
 
   return false;
@@ -1695,20 +1688,15 @@ CDatabaseQueryRuleCombination *CSmartPlaylist::CreateCombination() const
   return new CSmartPlaylistRuleCombination();
 }
 
-bool CSmartPlaylist::HasRoleRules() const
+bool CSmartPlaylist::HasRuleFields(const std::vector<int> &rulefields, std::set<std::string> &referencedPlaylists) const
 {
-  return m_ruleCombination.HasRoleRules();
+  return m_ruleCombination.HasRuleFields(rulefields, referencedPlaylists);
 }
 
 bool CSmartPlaylist::HasArtistSongRules() const
 {
   std::set<std::string> referencedPlaylists;
-  return m_ruleCombination.HasArtistSongRules(referencedPlaylists);
-}
-
-bool CSmartPlaylist::HasArtistSongRules(std::set<std::string> &referencedPlaylists) const
-{
-  return m_ruleCombination.HasArtistSongRules(referencedPlaylists);
+  return m_ruleCombination.HasRuleFields({ FieldRole, FieldGenre, FieldPath }, referencedPlaylists);
 }
 
 std::string CSmartPlaylist::GetArtistSongClause(const CDatabase &db, std::set<std::string> &referencedPlaylists) const
