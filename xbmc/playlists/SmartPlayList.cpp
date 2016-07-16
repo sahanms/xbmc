@@ -1223,9 +1223,9 @@ std::string CSmartPlaylistRuleCombination::GetTransSongClause(const CDatabase &d
     else
     { // Only "albumartist"      
       currentRule = albumartistClause;
-      if (strOriginalType == "artists" && genrepathClause.empty())
+      if (strType == "artists" && genrepathClause.empty())
         currentRule = "EXISTS(SELECT 1 FROM album_artist WHERE album_artist.idArtist = artistview.idArtist)";
-      else if (strOriginalType == "albums")
+      else if (strType == "albums")
       {
         if (!genrepathClause.empty())
           currentRule = "(EXISTS(SELECT 1 FROM album_artist "
