@@ -6564,6 +6564,7 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
     }
 
     // no artist given, so exclude any single albums (aka empty tagged albums)
+    // This causes "albums"  media filter artist selection to only offer album artists 
     if (albumArtistClause.empty())
     {
         option = options.find("show_singles");
