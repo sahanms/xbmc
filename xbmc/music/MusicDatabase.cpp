@@ -6278,48 +6278,9 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
   std::string type = musicUrl.GetType();
   const CUrlOptions::UrlOptions& options = musicUrl.GetOptions();
 
-  bool hasArtistSongRules = false; 
-  std::string xspSongRulesClause;
-
-  //Check playlist rules first as effects how role filter is used
-  auto option = options.find("xsp");
-  if (option != options.end())
-  {
-    CSmartPlaylist xsp;
-    if (!xsp.LoadFromJson(option->second.asString()))
-      return false;
-    // Check if playlist has song based rules of genre, path or role.
-    hasArtistSongRules = xsp.HasArtistSongRules();
-    // check if the filter playlist matches the item type
-    if (xsp.GetType() == type ||
-      (xsp.GetGroup() == type && !xsp.IsGroupMixed()))
-    {
-      std::set<std::string> playlists;
-      std::string xspWhere = xsp.GetWhereClause(*this, playlists);
-      filter.AppendWhere(xspWhere);
-      if (xsp.GetLimit() > 0)
-        sorting.limitEnd = xsp.GetLimit();
-      if (xsp.GetOrder() != SortByNone)
-        sorting.sortBy = xsp.GetOrder();
-      sorting.sortOrder = xsp.GetOrderAscending() ? SortOrderAscending : SortOrderDescending;
-      if (CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
-        sorting.sortAttributes = SortAttributeIgnoreArticle;
-    }
-    else if (xsp.GetType() == "artists" || xsp.GetType() == "albums")
-    {
-      /* Have navigated down from an "artists" or "albums" playlist. Any genre, path and artist/role 
-       criteria from the original playlist need to be applied e.g. having previously listed artists
-       that composed jazz songs then those are the songs that should play, not all the songs,
-       if any, that have this artist as a title artist.
-       Convert the song based rules from the original list to SQL for this type of item.
-      */
-      xspSongRulesClause = xsp.GetSongRulesClause(*this, type);
-    }
-  }
-
   //Process role options, common to artist and album type filtering
   int idRole = 1; // Default restrict song_artist to "artists" only, no other roles.
-  option = options.find("roleid");
+  auto option = options.find("roleid");
   if (option != options.end())
     idRole = (int)option->second.asInteger();
   else
@@ -6411,7 +6372,7 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
         " WHERE album_genre.idGenre = %i)",
         idGenre, idGenre);
     }
-    else if (!hasArtistSongRules)
+    else
     { // Artists can be only album artists, so for all artists (with linked albums or songs) 
       // we need to check both album_artist and song_artist tables.
       // Role is determined from song_artist table, so even if looking for album artists only
@@ -6433,15 +6394,9 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
         strSQL = "(artistview.idArtist IN (SELECT song_artist.idArtist FROM song_artist) OR"
                  " artistview.idArtist IN (SELECT album_artist.idArtist FROM album_artist )";
     }
-    else //Have artist song rules from playlist
-      strSQL = "";
+    strSQL += ")";
+    filter.AppendWhere(strSQL);
 
-    if (!hasArtistSongRules)
-    {
-      strSQL += ")";
-      filter.AppendWhere(strSQL);
-    }
-    
     // remove the null string
     strSQL = " artistview.strArtist != ''";
 
@@ -6489,20 +6444,12 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
     option = options.find("artistid");
     if (option != options.end())
     {
-      int idArtist = static_cast<int>(option->second.asInteger());
-      if (hasArtistSongRules)
-      { // Have artist song rules from playlist, provide specific artistid in this clause
-        StringUtils::Replace(xspSongRulesClause, "artistview.idArtist", option->second.asString());
-        filter.AppendWhere(xspSongRulesClause);
-      }
-      else
-      {        
-        strSongFrom = "EXISTS(SELECT 1 FROM song_artist JOIN song ON song.idSong = song_artist.idSong ";
-        strSongV = PrepareSQL("song_artist.idArtist = %i %s", idArtist, strRoleSQL.c_str());
-        albumArtistClause = PrepareSQL("EXISTS (SELECT 1 FROM album_artist "
-          "WHERE album_artist.idAlbum = albumview.idAlbum AND album_artist.idArtist = %i",
-          idArtist);
-      }
+      idArtist = static_cast<int>(option->second.asInteger());
+      strSongFrom = "EXISTS(SELECT 1 FROM song_artist JOIN song ON song.idSong = song_artist.idSong ";
+      strSongV = PrepareSQL("song_artist.idArtist = %i %s", idArtist, strRoleSQL.c_str());
+      albumArtistClause = PrepareSQL("EXISTS (SELECT 1 FROM album_artist "
+        "WHERE album_artist.idAlbum = albumview.idAlbum AND album_artist.idArtist = %i",
+        idArtist);
     }
     else
     {
@@ -6592,7 +6539,10 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
 
     option = options.find("albumid");
     if (option != options.end())
-      filter.AppendWhere(PrepareSQL("songview.idAlbum = %i", (int)option->second.asInteger()));
+    {
+      idAlbum = static_cast<int>(option->second.asInteger());
+      filter.AppendWhere(PrepareSQL("songview.idAlbum = %i", idAlbum));
+    }
 
     option = options.find("album");
     if (option != options.end())
@@ -6600,7 +6550,10 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
 
     option = options.find("genreid");
     if (option != options.end())
-      filter.AppendWhere(PrepareSQL("songview.idSong IN (SELECT song_genre.idSong FROM song_genre WHERE song_genre.idGenre = %i)", (int)option->second.asInteger()));
+    {
+      idGenre = static_cast<int>(option->second.asInteger());
+      filter.AppendWhere(PrepareSQL("songview.idSong IN (SELECT song_genre.idSong FROM song_genre WHERE song_genre.idGenre = %i)", idGenre));
+    }
 
     option = options.find("genre");
     if (option != options.end())
@@ -6610,20 +6563,13 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
     option = options.find("artistid");
     if (option != options.end())
     {
-      int idArtist = static_cast<int>(option->second.asInteger());
-      if (hasArtistSongRules)
-      {// Have artist song rules from playlist, provide specific artistid in this clause
-        StringUtils::Replace(xspSongRulesClause, "artistview.idArtist", option->second.asString());
-      }
-      else
-      {
-        songArtistClause = PrepareSQL("EXISTS (SELECT 1 FROM song_artist "
-          "WHERE song_artist.idSong = songview.idSong AND song_artist.idArtist = %i %s)", 
-          idArtist, strRoleSQL.c_str());
-        albumArtistClause = PrepareSQL("EXISTS (SELECT 1 FROM album_artist "
-          "WHERE album_artist.idAlbum = songview.idAlbum AND album_artist.idArtist = %i)",
-          idArtist);
-      }
+      idArtist = static_cast<int>(option->second.asInteger());
+      songArtistClause = PrepareSQL("EXISTS (SELECT 1 FROM song_artist "
+        "WHERE song_artist.idSong = songview.idSong AND song_artist.idArtist = %i %s)", 
+        idArtist, strRoleSQL.c_str());
+      albumArtistClause = PrepareSQL("EXISTS (SELECT 1 FROM album_artist "
+        "WHERE album_artist.idAlbum = songview.idAlbum AND album_artist.idArtist = %i)",
+        idArtist);
     }
     option = options.find("artist");
     if (option != options.end())
@@ -6656,28 +6602,91 @@ bool CMusicDatabase::GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription
           filter.AppendWhere("(" + songArtistClause + " OR " + albumArtistClause + ")");
       }
     }
-    // Any artist/role, genre or path filters transfered from "artists" playlist
-    if (!xspSongRulesClause.empty())
-      filter.AppendWhere(xspSongRulesClause);
-  }  
+  } 
+
+  bool hasPlaylistSongRules = false;
+  std::string xspWhere, xspJSON;
+  CSmartPlaylist xsp;
+
+  //Check playlist rules 
+  option = options.find("xsp");
+  if (option != options.end())
+  {
+    xspJSON = option->second.asString();
+    if (!xsp.LoadFromJson(xspJSON))
+      return false;
+    // Check if playlist has song based rules of genre, path or role.
+    hasPlaylistSongRules = xsp.HasArtistSongRules();
+    if (hasPlaylistSongRules)
+      //Clear where clause built from options, they need to be combined with rules
+      filter.where.clear();
+    // check if the filter playlist matches the item type
+    if (xsp.GetType() == type ||
+      (xsp.GetGroup() == type && !xsp.IsGroupMixed()))
+    {
+      std::set<std::string> playlists;
+      xspWhere = xsp.GetWhereClause(*this, playlists);
+      filter.AppendWhere(xspWhere);
+      //Handle song based rules too
+      if (hasPlaylistSongRules)
+      {
+        xspWhere = xsp.GetSongRulesClause(*this);
+        filter.AppendWhere(xspWhere, xsp.GetMatchAllRules());
+      }
+
+      if (xsp.GetLimit() > 0)
+        sorting.limitEnd = xsp.GetLimit();
+      if (xsp.GetOrder() != SortByNone)
+        sorting.sortBy = xsp.GetOrder();
+      sorting.sortOrder = xsp.GetOrderAscending() ? SortOrderAscending : SortOrderDescending;
+      if (CSettings::GetInstance().GetBool(CSettings::SETTING_FILELISTS_IGNORETHEWHENSORTING))
+        sorting.sortAttributes = SortAttributeIgnoreArticle;
+    }
+    else if (hasPlaylistSongRules)
+    {
+      /* Have navigated down from an "artists" or "albums" playlist. Any genre, path and artist/role
+      criteria from the original playlist need to be applied e.g. having previously listed artists
+      that composed jazz songs then those are the songs that should play, not all the songs,
+      if any, that have this artist as a title artist.
+      Combine any song based rules with the navigation options.
+      */
+      xsp.SetType(type);
+      xspWhere = xsp.GetSongRulesClause(*this, /*albumartistsonly*/true, idGenre, idArtist, idRole, idAlbum);
+      filter.AppendWhere(xspWhere);
+    }
+  }
+
+  //Check filtering, could be on already filtered node or playlist or drilled down from one
+  bool hasFilterSongRules = false;
+  std::string filterWhere, filterJSON;
+  CSmartPlaylist xspFilter;
+
   option = options.find("filter");
   if (option != options.end())
   {
-    CSmartPlaylist xspFilter;
-    if (!xspFilter.LoadFromJson(option->second.asString()))
+    filterJSON = option->second.asString();
+    if (!xspFilter.LoadFromJson(filterJSON))
       return false;
-
-    // check if the filter playlist matches the item type
-    if (xspFilter.GetType() == type)
-    {
-      std::set<std::string> playlists;
-      filter.AppendWhere(xspFilter.GetWhereClause(*this, playlists));
+    hasFilterSongRules = xspFilter.HasArtistSongRules();
+    if (hasFilterSongRules && hasPlaylistSongRules)
+    { // Filtering a playlist both with song based rules, have to combine them
+      // May also have drilled down from initial playlist and have options
+      // Add the playlist rules to the filter
+      xspFilter.AppendRules(xsp);
+      // Clear the clauses built for playlist and/or options, will build from filter
+      filter.where.clear();
     }
-    // remove the filter if it doesn't match the item type
-    else
-      musicUrl.RemoveOption("filter");
+    std::set<std::string> playlists;
+    filterWhere = xspFilter.GetWhereClause(*this, playlists);
+    filter.AppendWhere(filterWhere);
+    if (hasFilterSongRules)
+    {
+      std::string clause = xspFilter.GetSongRulesClause(*this, /*albumartistsonly*/true, idGenre, idArtist, idRole, idAlbum);
+      filter.AppendWhere(clause, xspFilter.GetMatchAllRules());
+      CLog::Log(LOGDEBUG, "filterWhere %s", clause.c_str()); //###
+    }
   }
-
+  
   return true;
 }
 
