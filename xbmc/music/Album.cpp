@@ -47,8 +47,6 @@ CAlbum::CAlbum(const CFileItem& item)
 {
   Reset();
   const CMusicInfoTag& tag = *item.GetMusicInfoTag();
-  SYSTEMTIME stTime;
-  tag.GetReleaseDate(stTime);
   strAlbum = tag.GetAlbum();
   strMusicBrainzAlbumID = tag.GetMusicBrainzAlbumID();
   strReleaseGroupMBID = tag.GetMusicBrainzReleaseGroupID();
@@ -194,7 +192,7 @@ CAlbum::CAlbum(const CFileItem& item)
     }
   }
 
-  iYear = stTime.wYear;
+  iYear = tag.GetYear();
   strLabel = tag.GetRecordLabel();
   strType = tag.GetMusicBrainzReleaseType();
   bCompilation = tag.GetCompilation();

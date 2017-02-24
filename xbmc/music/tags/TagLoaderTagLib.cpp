@@ -189,7 +189,11 @@ bool CTagLoaderTagLib::ParseTag(ASF::Tag *asf, EmbeddedArt *art, CMusicInfoTag& 
     else if (it->first == "WM/Script")
     {} // Known unsupported, suppress warnings
     else if (it->first == "WM/Year")
-      tag.SetYear(atoi(it->second.front().toString().toCString(true)));
+      SetDateRecorded(tag, it->second.front().toString().to8Bit(true));
+    else if (it->first == "WM/OriginalReleaseTime")
+      tag.SetDateOrigReleased(it->second.front().toString().to8Bit(true));
+    else if (it->first == "WM/ReleaseTime")
+      tag.SetDateReleased(it->second.front().toString().to8Bit(true));
     else if (it->first == "MusicBrainz/Artist Id")
       tag.SetMusicBrainzArtistID(SplitMBID(GetASFStringList(it->second)));
     else if (it->first == "MusicBrainz/Album Id")
@@ -301,7 +305,9 @@ bool CTagLoaderTagLib::ParseTag(ID3v2::Tag *id3v2, MUSIC_INFO::EmbeddedArt *art,
     else if (it->first == "TCON")   SetGenre(tag, GetID3v2StringList(it->second));
     else if (it->first == "TRCK")   tag.SetTrackNumber(strtol(it->second.front()->toString().toCString(true), nullptr, 10));
     else if (it->first == "TPOS")   tag.SetDiscNumber(strtol(it->second.front()->toString().toCString(true), nullptr, 10));
-    else if (it->first == "TYER")   tag.SetYear(strtol(it->second.front()->toString().toCString(true), nullptr, 10));
+    else if (it->first == "TYER")   SetDateRecorded(tag, it->second.front()->toString().to8Bit(true));  //v2.3 only, format YYYY
+    else if (it->first == "TDAT")   {} //v2.3 only, format DDMM so  strictly DateRecorded = TYER + TDAT
+    else if (it->first == "TORY")   tag.SetDateOrigReleased(it->second.front()->toString().to8Bit(true));  //v2.3 YYYY year only
     else if (it->first == "TCMP")   tag.SetCompilation((strtol(it->second.front()->toString().toCString(true), nullptr, 10) == 0) ? false : true);
     else if (it->first == "TENC")   {} // EncodedBy
     else if (it->first == "TCOM")   AddArtistRole(tag, "Composer", GetID3v2StringList(it->second));
@@ -310,8 +316,9 @@ bool CTagLoaderTagLib::ParseTag(ID3v2::Tag *id3v2, MUSIC_INFO::EmbeddedArt *art,
     else if (it->first == "TPE4")   AddArtistRole(tag, "Remixer", GetID3v2StringList(it->second));
     else if (it->first == "TPUB")   tag.SetRecordLabel(it->second.front()->toString().to8Bit(true));
     else if (it->first == "TCOP")   {} // Copyright message
-    else if (it->first == "TDRC")   tag.SetYear(strtol(it->second.front()->toString().toCString(true), nullptr, 10));
-    else if (it->first == "TDRL")   tag.SetYear(strtol(it->second.front()->toString().toCString(true), nullptr, 10));
+    else if (it->first == "TDRC")   SetDateRecorded(tag, it->second.front()->toString().to8Bit(true));
+    else if (it->first == "TDRL")   tag.SetDateReleased(it->second.front()->toString().to8Bit(true));
+    else if (it->first == "TDOR")   tag.SetDateOrigReleased(it->second.front()->toString().to8Bit(true));
     else if (it->first == "TDTG")   {} // Tagging time
     else if (it->first == "TLAN")   {} // Languages
     else if (it->first == "TMOO")   tag.SetMood(it->second.front()->toString().to8Bit(true));
@@ -506,7 +513,9 @@ bool CTagLoaderTagLib::ParseTag(APE::Tag *ape, EmbeddedArt *art, CMusicInfoTag& 
     else if (it->first == "DISCNUMBER" || it->first == "DISC")
       tag.SetDiscNumber(it->second.toString().toInt());
     else if (it->first == "YEAR")
-      tag.SetYear(it->second.toString().toInt());
+      SetDateRecorded(tag, it->second.toString().to8Bit(true));
+    else if (it->first == "ORININALYEAR")      
+      tag.SetDateOrigReleased(it->second.toString().to8Bit(true));
     else if (it->first == "GENRE")
       SetGenre(tag, StringListToVectorString(it->second.toStringList()));
     else if (it->first == "MOOD")
@@ -616,10 +625,12 @@ bool CTagLoaderTagLib::ParseTag(Ogg::XiphComment *xiph, EmbeddedArt *art, CMusic
       tag.SetTrackNumber(it->second.front().toInt());
     else if (it->first == "DISCNUMBER")
       tag.SetDiscNumber(it->second.front().toInt());
-    else if (it->first == "YEAR")
-      tag.SetYear(it->second.front().toInt());
-    else if (it->first == "DATE")
-      tag.SetYear(it->second.front().toInt());
+    else if (it->first == "YEAR" || it->first == "DATE")
+      SetDateRecorded(tag, it->second.front().to8Bit(true));
+    else if (it->first == "ORIGINALYEAR" || it->first == "ORIGINALDATE")
+      tag.SetDateOrigReleased(it->second.front().to8Bit(true));
+    else if (it->first == "RELEASETIME" || it->first == "RELEASEDATE")
+      tag.SetDateReleased(it->second.front().to8Bit(true));
     else if (it->first == "GENRE")
       SetGenre(tag, StringListToVectorString(it->second));
     else if (it->first == "MOOD")
@@ -835,7 +846,7 @@ bool CTagLoaderTagLib::ParseTag(MP4::Tag *mp4, EmbeddedArt *art, CMusicInfoTag& 
     else if (it->first == "disk")
       tag.SetDiscNumber(it->second.toIntPair().first);
     else if (it->first == "\251day")
-      tag.SetYear(it->second.toStringList().front().toInt());
+      SetDateRecorded(tag, it->second.toStringList().front().to8Bit(true));
     else if (it->first == "----:com.apple.iTunes:replaygain_track_gain")
       replayGainInfo.ParseGain(ReplayGain::TRACK, it->second.toStringList().front().toCString());
     else if (it->first == "----:com.apple.iTunes:replaygain_album_gain")
@@ -1004,6 +1015,12 @@ void CTagLoaderTagLib::SetComposerSort(CMusicInfoTag &tag, const std::vector<std
     tag.SetComposerSort(values[0]);
   else
     tag.SetComposerSort(StringUtils::Join(values, g_advancedSettings.m_musicItemSeparator));
+}
+
+void CTagLoaderTagLib::SetDateRecorded(MUSIC_INFO::CMusicInfoTag & tag, const std::string & strDate)
+{
+  tag.SetDateRecorded(strDate);
+  tag.SetYear(atoi(strDate.substr(0, 4).c_str()));
 }
 
 void CTagLoaderTagLib::SetGenre(CMusicInfoTag &tag, const std::vector<std::string> &values)

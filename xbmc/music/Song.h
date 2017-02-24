@@ -173,6 +173,9 @@ public:
   int iTrack;
   int iDuration;
   int iYear;
+  std::string strDateRecorded;
+  std::string strDateReleased;
+  std::string strDateOrigReleased;
   int iTimesPlayed;
   CDateTime lastPlayed;
   CDateTime dateAdded;

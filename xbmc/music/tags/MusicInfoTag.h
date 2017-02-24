@@ -65,10 +65,12 @@ public:
   int GetTrackAndDiscNumber() const;
   int GetDuration() const;  // may be set even if Loaded() returns false
   int GetYear() const;
+  const std::string& GetDateRecorded()const;
+  const std::string& GetDateReleased()const;
+  const std::string& GetDateOrigReleased()const;
   int GetDatabaseId() const;
   const std::string &GetType() const;
 
-  void GetReleaseDate(SYSTEMTIME& dateTime) const;
   std::string GetYearString() const;
   const std::string& GetMusicBrainzTrackID() const;
   const std::vector<std::string>& GetMusicBrainzArtistID() const;
@@ -111,8 +113,10 @@ public:
   void SetGenre(const std::string& strGenre);
   void SetGenre(const std::vector<std::string>& genres);
   void SetYear(int year);
+  void SetDateRecorded(const std::string& strDateRecorded);
+  void SetDateReleased(const std::string& strDateReleased);
+  void SetDateOrigReleased(const std::string& strDateOrigReleased);
   void SetDatabaseId(long id, const std::string &type);
-  void SetReleaseDate(SYSTEMTIME& dateTime);
   void SetTrackNumber(int iTrack);
   void SetDiscNumber(int iDiscNumber);
   void SetTrackAndDiscNumber(int iTrackAndDisc);
@@ -229,7 +233,12 @@ protected:
   int m_listeners;
   int m_iTimesPlayed;
   int m_iAlbumId;
-  SYSTEMTIME m_dwReleaseDate;
+  // Tagged dates as strings because they could be YYYY, YYYY-MM or YYYY-MM-DD
+  // or not a correct date at all
+  std::string m_strDateRecorded; 
+  std::string m_strDateReleased;
+  std::string m_strDateOrigReleased;
+  int m_iYear;
   CAlbum::ReleaseType m_albumReleaseType;
 
   EmbeddedArtInfo m_coverArt; ///< art information

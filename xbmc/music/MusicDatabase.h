@@ -122,6 +122,9 @@ public:
    \param iTrack [in] the track number and disc number of the song
    \param iDuration [in] the duration of the song
    \param iYear [in] the year of the song
+   \param strDateRecorded [in] when song was recorded in iso8601 YYYY-MM-DD (or partial) format
+   \param strDateReleased [in] when song was first released in iso8601 YYYY-MM-DD (or partial) format
+   \param strDateOrigReleased [in] when the original recording of the song was released in iso8601 YYYY-MM-DD (or partial) format
    \param iTimesPlayed [in] the number of times the song has been played
    \param iStartOffset [in] the start offset of the song (when using a single audio file with a .cue)
    \param iEndOffset [in] the end offset of the song (when using a single audio file with .cue)
@@ -142,6 +145,9 @@ public:
               const std::string &artistDisp, const std::string &artistSort,
               const std::vector<std::string>& genres,
               int iTrack, int iDuration, int iYear,
+              const std::string& strDateRecorded,
+              const std::string& strDateReleased,
+              const std::string& strDateOrigReleased,
               const int iTimesPlayed, int iStartOffset, int iEndOffset,
               const CDateTime& dtLastPlayed, float rating, int userrating, int votes,
               const ReplayGain& replayGain);
@@ -174,6 +180,9 @@ public:
    \param iTrack [in] the track number and disc number of the song
    \param iDuration [in] the duration of the song
    \param iYear [in] the year of the song
+   \param strDateRecorded [in] when song was recorded in iso8601 YYYY-MM-DD (or partial) format
+   \param strDateReleased [in] when song was first released in iso8601 YYYY-MM-DD (or partial) format
+   \param strDateOrigReleased [in] when the original recording of the song was released in iso8601 YYYY-MM-DD (or partial) format
    \param iTimesPlayed [in] the number of times the song has been played
    \param iStartOffset [in] the start offset of the song (when using a single audio file with a .cue)
    \param iEndOffset [in] the end offset of the song (when using a single audio file with .cue)
@@ -191,6 +200,9 @@ public:
                  const std::string &artistDisp, const std::string &artistSort,
                  const std::vector<std::string>& genres,
                  int iTrack, int iDuration, int iYear,
+                 const std::string& strDateRecorded,
+                 const std::string& strDateReleased,
+                 const std::string& strDateOrigReleased,
                  int iTimesPlayed, int iStartOffset, int iEndOffset,
                  const CDateTime& dtLastPlayed, float rating, int userrating, int votes, const ReplayGain& replayGain);
 

@@ -175,8 +175,10 @@ void CMusicDatabase::CreateTables()
   m_pDS->exec("CREATE TABLE song (idSong integer primary key, "
               " idAlbum integer, idPath integer, "
               " strArtistDisp text, strArtistSort text, strGenres text, strTitle varchar(512), "
-              " iTrack integer, iDuration integer, iYear integer, "
+              " iTrack integer, iDuration integer,  "
               " strFileName text, strMusicBrainzTrackID text, "
+              " iYear INTEGER, strDateRecorded TEXT, "
+              " strDateOrigReleased TEXT, strDateReleased TEXT, "
               " iTimesPlayed integer, iStartOffset integer, iEndOffset integer, "
               " lastplayed varchar(20) default NULL, "
               " rating FLOAT NOT NULL DEFAULT 0, votes INTEGER NOT NULL DEFAULT 0, "
@@ -419,6 +421,9 @@ bool CMusicDatabase::AddAlbum(CAlbum& album)
                            song->GetArtistSort(),
                            song->genre,
                            song->iTrack, song->iDuration, song->iYear,
+                           song->strDateRecorded, 
+                           song->strDateReleased, 
+                           song->strDateOrigReleased,
                            song->iTimesPlayed, song->iStartOffset,
                            song->iEndOffset,
                            song->lastPlayed,
@@ -508,6 +513,9 @@ bool CMusicDatabase::UpdateAlbum(CAlbum& album)
         song.iTrack,
         song.iDuration,
         song.iYear,
+        song.strDateRecorded,
+        song.strDateReleased,
+        song.strDateOrigReleased,
         song.iTimesPlayed,
         song.iStartOffset,
         song.iEndOffset,
@@ -550,6 +558,9 @@ int CMusicDatabase::AddSong(const int idAlbum,
                             const std::string &artistDisp, const std::string &artistSort,
                             const std::vector<std::string>& genres,
                             int iTrack, int iDuration, int iYear,
+                            const std::string& strDateRecorded,
+                            const std::string& strDateReleased,
+                            const std::string& strDateOrigReleased,
                             const int iTimesPlayed, int iStartOffset, int iEndOffset,
                             const CDateTime& dtLastPlayed, float rating, int userrating, int votes,
                             const ReplayGain& replayGain)
@@ -590,17 +601,19 @@ int CMusicDatabase::AddSong(const int idAlbum,
       strSQL=PrepareSQL("INSERT INTO song ("
                                           "idSong,idAlbum,idPath,strArtistDisp,strGenres,"
                                           "strTitle,iTrack,iDuration,iYear,strFileName,"
+                                          "strDateRecorded, strDateReleased, strDateOrigReleased,"
                                           "strMusicBrainzTrackID, strArtistSort, "
                                           "iTimesPlayed,iStartOffset, "
                                           "iEndOffset,lastplayed,rating,userrating,votes,comment,mood,strReplayGain"
-                        ") values (NULL, %i, %i, '%s', '%s', '%s', %i, %i, %i, '%s'",
+                        ") values (NULL, %i, %i, '%s', '%s', '%s', %i, %i, %i, '%s', '%s', '%s', '%s'",
                     idAlbum,
                     idPath,
                     artistDisp.c_str(),
                     StringUtils::Join(genres, g_advancedSettings.m_musicItemSeparator).c_str(),
                     strTitle.c_str(),
-                    iTrack, iDuration, iYear,
-                    strFileName.c_str());
+                    iTrack, iDuration, iYear,                    
+                    strFileName.c_str(),
+                    strDateRecorded.c_str(), strDateReleased.c_str(), strDateOrigReleased.c_str());
 
       if (strMusicBrainzTrackID.empty())
         strSQL += PrepareSQL(",NULL");
@@ -626,7 +639,9 @@ int CMusicDatabase::AddSong(const int idAlbum,
       idSong = m_pDS->fv("idSong").get_asInt();
       m_pDS->close();
       UpdateSong( idSong, strTitle, strMusicBrainzTrackID, strPathAndFileName, strComment, strMood, strThumb, 
-                  artistDisp, artistSort, genres, iTrack, iDuration, iYear, iTimesPlayed, iStartOffset, iEndOffset, 
+                  artistDisp, artistSort, genres, iTrack, iDuration, iYear, 
+                  strDateRecorded, strDateReleased, strDateOrigReleased,
+                  iTimesPlayed, iStartOffset, iEndOffset, 
                   dtLastPlayed, rating, userrating, votes, replayGain);
     }
 
@@ -717,6 +732,9 @@ int CMusicDatabase::UpdateSong(int idSong, const CSong &song)
                     song.iTrack,
                     song.iDuration,
                     song.iYear,
+                    song.strDateRecorded,
+                    song.strDateReleased,
+                    song.strDateOrigReleased,
                     song.iTimesPlayed,
                     song.iStartOffset,
                     song.iEndOffset,
@@ -734,6 +752,9 @@ int CMusicDatabase::UpdateSong(int idSong,
                                const std::string &artistDisp, const std::string &artistSort,
                                const std::vector<std::string>& genres,
                                int iTrack, int iDuration, int iYear,
+                               const std::string& strDateRecorded,
+                               const std::string& strDateReleased,
+                               const std::string& strDateOrigReleased,
                                int iTimesPlayed, int iStartOffset, int iEndOffset,
                                const CDateTime& dtLastPlayed, float rating, int userrating, int votes, 
                                const ReplayGain& replayGain)
@@ -747,13 +768,16 @@ int CMusicDatabase::UpdateSong(int idSong,
   int idPath = AddPath(strPath);
 
   strSQL = PrepareSQL("UPDATE song SET idPath = %i, strArtistDisp = '%s', strGenres = '%s', "
-      " strTitle = '%s', iTrack = %i, iDuration = %i, iYear = %i, strFileName = '%s'",
+      " strTitle = '%s', iTrack = %i, iDuration = %i, iYear = %i, strFileName = '%s', "
+      " strDateRecorded = '%s', strDateReleased = '%s', strDateOrigReleased = '%s', ",
       idPath,
       artistDisp.c_str(),
       StringUtils::Join(genres, g_advancedSettings.m_musicItemSeparator).c_str(),
       strTitle.c_str(),
       iTrack, iDuration, iYear,
-      strFileName.c_str());
+      strFileName.c_str(),
+      strDateRecorded.c_str(), strDateReleased.c_str(), strDateOrigReleased.c_str()
+  );
   if (strMusicBrainzTrackID.empty())
     strSQL += PrepareSQL(", strMusicBrainzTrackID = NULL");
   else
@@ -2015,9 +2039,7 @@ void CMusicDatabase::GetFileItemFromDataset(const dbiplus::sql_record* const rec
   item->GetMusicInfoTag()->SetTrackAndDiscNumber(record->at(song_iTrack).get_asInt());
   item->GetMusicInfoTag()->SetDuration(record->at(song_iDuration).get_asInt());
   item->GetMusicInfoTag()->SetDatabaseId(record->at(song_idSong).get_asInt(), MediaTypeSong);
-  SYSTEMTIME stTime;
-  stTime.wYear = (WORD)record->at(song_iYear).get_asInt();
-  item->GetMusicInfoTag()->SetReleaseDate(stTime);
+  item->GetMusicInfoTag()->SetYear(record->at(song_iYear).get_asInt());
   item->GetMusicInfoTag()->SetTitle(record->at(song_strTitle).get_asString());
   item->SetLabel(record->at(song_strTitle).get_asString());
   item->m_lStartOffset = record->at(song_iStartOffset).get_asInt();
@@ -3646,9 +3668,7 @@ bool CMusicDatabase::GetYearsNav(const std::string& strBaseDir, CFileItemList& i
     while (!m_pDS->eof())
     {
       CFileItemPtr pItem(new CFileItem(m_pDS->fv(0).get_asString()));
-      SYSTEMTIME stTime;
-      stTime.wYear = (WORD)m_pDS->fv(0).get_asInt();
-      pItem->GetMusicInfoTag()->SetReleaseDate(stTime);
+      pItem->GetMusicInfoTag()->SetYear(m_pDS->fv(0).get_asInt());
 
       CMusicDbUrl itemUrl = musicUrl;
       std::string strDir = StringUtils::Format("%i/", m_pDS->fv(0).get_asInt());
@@ -5189,6 +5209,14 @@ void CMusicDatabase::UpdateTables(int version)
     // Remove albuminfosong table
     m_pDS->exec("DROP TABLE albuminfosong");
   }
+  if (version < 68)
+  {
+    //Add strDateRecorded, strDateOrigReleased and strDateReleased to song table
+    //These are iso8601 format but can be partial e.g YYYY-MM-DD, YYYY-MM or YYYY
+    m_pDS->exec("ALTER TABLE song ADD strDateRecorded TEXT\n");
+    m_pDS->exec("ALTER TABLE song ADD strDateOrigReleased TEXT\n");
+    m_pDS->exec("ALTER TABLE song ADD strDateReleased TEXT\n");
+  }
   // Set the verion of tag scanning required. 
   // Not every schema change requires the tags to be rescanned, set to the highest schema version 
   // that needs this. Forced rescanning (of music files that have not changed since they were 
@@ -5208,7 +5236,7 @@ void CMusicDatabase::UpdateTables(int version)
 
 int CMusicDatabase::GetSchemaVersion() const
 {
-  return 67;
+  return 68;
 }
 
 int CMusicDatabase::GetMusicNeedsTagScan()

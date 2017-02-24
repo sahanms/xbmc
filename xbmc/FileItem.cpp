@@ -1824,10 +1824,7 @@ bool CFileItem::LoadTracksFromCueDocument(CFileItemList& scannedItems)
         if (!tag.GetCueSheet().empty())
           song.strCueSheet = tag.GetCueSheet();
 
-        SYSTEMTIME dateTime;
-        tag.GetReleaseDate(dateTime);
-        if (dateTime.wYear)
-          song.iYear = dateTime.wYear;
+        song.iYear = tag.GetYear();
         if (song.embeddedArt.empty() && !tag.GetCoverArtInfo().empty())
           song.embeddedArt = tag.GetCoverArtInfo();
       }

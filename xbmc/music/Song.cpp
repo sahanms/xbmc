@@ -31,8 +31,6 @@ using namespace MUSIC_INFO;
 CSong::CSong(CFileItem& item)
 {
   CMusicInfoTag& tag = *item.GetMusicInfoTag();
-  SYSTEMTIME stTime;
-  tag.GetReleaseDate(stTime);
   strTitle = tag.GetTitle();
   genre = tag.GetGenre();
   std::vector<std::string> artist = tag.GetArtist();
@@ -169,7 +167,10 @@ CSong::CSong(CFileItem& item)
   rating = tag.GetRating();
   userrating = tag.GetUserrating();
   votes = tag.GetVotes();
-  iYear = stTime.wYear;
+  iYear = tag.GetYear();
+  strDateRecorded = tag.GetDateRecorded();
+  strDateReleased = tag.GetDateReleased();
+  strDateOrigReleased = tag.GetDateOrigReleased();
   iTrack = tag.GetTrackAndDiscNumber();
   iDuration = tag.GetDuration();
   strRecordLabel = tag.GetRecordLabel();
@@ -228,6 +229,9 @@ void CSong::Serialize(CVariant& value) const
   value["lastplayed"] = lastPlayed.IsValid() ? lastPlayed.GetAsDBDateTime() : "";
   value["dateadded"] = dateAdded.IsValid() ? dateAdded.GetAsDBDateTime() : "";
   value["albumid"] = idAlbum;
+  value["daterecorded"] = strDateRecorded;          //TDRC or DATE
+  value["datereleased"] = strDateReleased;          //TDRL or RELEASEDATE
+  value["dateorigreleased"] = strDateOrigReleased;  //TDOR or ORIGINALDATE
 }
 
 void CSong::Clear()
@@ -251,6 +255,9 @@ void CSong::Clear()
   iTrack = 0;
   iDuration = 0;
   iYear = 0;
+  strDateRecorded.clear();
+  strDateReleased.clear();
+  strDateOrigReleased.clear();
   iStartOffset = 0;
   iEndOffset = 0;
   idSong = -1;

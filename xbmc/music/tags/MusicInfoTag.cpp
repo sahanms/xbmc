@@ -141,8 +141,11 @@ const CMusicInfoTag& CMusicInfoTag::operator =(const CMusicInfoTag& tag)
   m_iAlbumId = tag.m_iAlbumId;
   m_replayGain = tag.m_replayGain;
   m_albumReleaseType = tag.m_albumReleaseType;
+  m_strDateRecorded = tag.m_strDateRecorded;
+  m_strDateReleased = tag.m_strDateReleased;
+  m_strDateOrigReleased = tag.m_strDateOrigReleased;
+  m_iYear = tag.m_iYear;
 
-  memcpy(&m_dwReleaseDate, &tag.m_dwReleaseDate, sizeof(m_dwReleaseDate));
   m_coverArt = tag.m_coverArt;
   return *this;
 }
@@ -252,14 +255,24 @@ const std::vector<std::string>& CMusicInfoTag::GetGenre() const
   return m_genre;
 }
 
-void CMusicInfoTag::GetReleaseDate(SYSTEMTIME& dateTime) const
-{
-  memcpy(&dateTime, &m_dwReleaseDate, sizeof(m_dwReleaseDate));
-}
-
 int CMusicInfoTag::GetYear() const
 {
-  return m_dwReleaseDate.wYear;
+  return m_iYear;
+}
+
+const std::string& CMusicInfoTag::GetDateRecorded() const
+{
+  return m_strDateRecorded;
+}
+
+const std::string& CMusicInfoTag::GetDateReleased() const
+{
+  return m_strDateReleased;
+}
+
+const std::string& CMusicInfoTag::GetDateOrigReleased() const
+{
+  return m_strDateOrigReleased;
 }
 
 int CMusicInfoTag::GetDatabaseId() const
@@ -274,7 +287,7 @@ const std::string &CMusicInfoTag::GetType() const
 
 std::string CMusicInfoTag::GetYearString() const
 {
-  return m_dwReleaseDate.wYear ? StringUtils::Format("%i", m_dwReleaseDate.wYear) : StringUtils::Empty;
+  return m_iYear ? StringUtils::Format("%i", m_iYear) : StringUtils::Empty;
 }
 
 const std::string &CMusicInfoTag::GetComment() const
@@ -461,19 +474,28 @@ void CMusicInfoTag::SetGenre(const std::vector<std::string>& genres)
 
 void CMusicInfoTag::SetYear(int year)
 {
-  memset(&m_dwReleaseDate, 0, sizeof(m_dwReleaseDate) );
-  m_dwReleaseDate.wYear = year;
+  m_iYear = year;
+}
+
+void CMusicInfoTag::SetDateRecorded(const std::string & strDateRecorded)
+{
+  m_strDateRecorded = strDateRecorded;
+}
+
+void CMusicInfoTag::SetDateReleased(const std::string & strDateReleased)
+{
+  m_strDateReleased = strDateReleased;
+}
+
+void CMusicInfoTag::SetDateOrigReleased(const std::string & strDateOrigReleased)
+{
+  m_strDateOrigReleased = strDateOrigReleased;
 }
 
 void CMusicInfoTag::SetDatabaseId(long id, const std::string &type)
 {
   m_iDbId = id;
   m_type = type;
-}
-
-void CMusicInfoTag::SetReleaseDate(SYSTEMTIME& dateTime)
-{
-  memcpy(&m_dwReleaseDate, &dateTime, sizeof(m_dwReleaseDate) );
 }
 
 void CMusicInfoTag::SetTrackNumber(int iTrack)
@@ -730,9 +752,7 @@ void CMusicInfoTag::SetAlbum(const CAlbum& album)
   SetUserrating(album.iUserrating);
   SetVotes(album.iVotes);
   SetCompilation(album.bCompilation);
-  SYSTEMTIME stTime;
-  stTime.wYear = album.iYear;
-  SetReleaseDate(stTime);
+  SetYear(album.iYear);
   SetAlbumReleaseType(album.releaseType);
   SetDateAdded(album.dateAdded);
   SetPlayCount(album.iTimesPlayed);
@@ -775,9 +795,7 @@ void CMusicInfoTag::SetSong(const CSong& song)
   SetUserrating(song.userrating);
   SetVotes(song.votes);
   SetURL(song.strFileName);
-  SYSTEMTIME stTime;
-  stTime.wYear = song.iYear;
-  SetReleaseDate(stTime);
+  SetYear(song.iYear);
   SetTrackAndDiscNumber(song.iTrack);
   SetDuration(song.iDuration);
   SetMood(song.strMood);
@@ -822,7 +840,7 @@ void CMusicInfoTag::Serialize(CVariant& value) const
   value["track"] = GetTrackNumber();
   value["disc"] = GetDiscNumber();
   value["loaded"] = m_bLoaded;
-  value["year"] = m_dwReleaseDate.wYear;
+  value["year"] = m_iYear;
   value["musicbrainztrackid"] = m_strMusicBrainzTrackID;
   value["musicbrainzartistid"] = m_musicBrainzArtistID;
   value["musicbrainzalbumid"] = m_strMusicBrainzAlbumID;
@@ -859,6 +877,9 @@ void CMusicInfoTag::Serialize(CVariant& value) const
     value["releasetype"] = CAlbum::ReleaseTypeToString(m_albumReleaseType);
   else if (m_type.compare(MediaTypeSong) == 0)
     value["albumreleasetype"] = CAlbum::ReleaseTypeToString(m_albumReleaseType);
+  value["daterecorded"] = m_strDateRecorded;          //TDRC or DATE
+  value["datereleased"] = m_strDateReleased;          //TDRL or RELEASEDATE
+  value["dateorigreleased"] = m_strDateOrigReleased;  //TDOR or ORIGINALDATE
 }
 
 void CMusicInfoTag::ToSortable(SortItem& sortable, Field field) const
@@ -880,7 +901,7 @@ void CMusicInfoTag::ToSortable(SortItem& sortable, Field field) const
   case FieldGenre:       sortable[FieldGenre] = m_genre; break;
   case FieldTime:        sortable[FieldTime] = m_iDuration; break;
   case FieldTrackNumber: sortable[FieldTrackNumber] = m_iTrack; break;
-  case FieldYear:        sortable[FieldYear] = m_dwReleaseDate.wYear; break;
+  case FieldYear:        sortable[FieldYear] = m_iYear; break;
   case FieldComment:     sortable[FieldComment] = m_strComment; break;
   case FieldMoods:       sortable[FieldMoods] = m_strMood; break;
   case FieldRating:      sortable[FieldRating] = m_Rating; break;
@@ -911,7 +932,6 @@ void CMusicInfoTag::Archive(CArchive& ar)
     ar << m_iDuration;
     ar << m_iTrack;
     ar << m_bLoaded;
-    ar << m_dwReleaseDate;
     ar << m_strMusicBrainzTrackID;
     ar << m_musicBrainzArtistID;
     ar << m_strMusicBrainzAlbumID;
@@ -944,6 +964,10 @@ void CMusicInfoTag::Archive(CArchive& ar)
     ar << m_coverArt;
     ar << m_cuesheet;
     ar << static_cast<int>(m_albumReleaseType);
+    ar << m_strDateRecorded;
+    ar << m_strDateReleased;
+    ar << m_strDateOrigReleased;
+    ar << m_iYear;
   }
   else
   {
@@ -959,7 +983,6 @@ void CMusicInfoTag::Archive(CArchive& ar)
     ar >> m_iDuration;
     ar >> m_iTrack;
     ar >> m_bLoaded;
-    ar >> m_dwReleaseDate;
     ar >> m_strMusicBrainzTrackID;
     ar >> m_musicBrainzArtistID;
     ar >> m_strMusicBrainzAlbumID;
@@ -1002,6 +1025,10 @@ void CMusicInfoTag::Archive(CArchive& ar)
     int albumReleaseType;
     ar >> albumReleaseType;
     m_albumReleaseType = static_cast<CAlbum::ReleaseType>(albumReleaseType);
+    ar >> m_strDateRecorded;
+    ar >> m_strDateReleased;
+    ar >> m_strDateOrigReleased;
+    ar >> m_iYear;
   }
 }
 
@@ -1035,11 +1062,14 @@ void CMusicInfoTag::Clear()
   m_iDbId = -1;
   m_type.clear();
   m_iTimesPlayed = 0;
-  memset(&m_dwReleaseDate, 0, sizeof(m_dwReleaseDate));
   m_iAlbumId = -1;
   m_coverArt.clear();
   m_replayGain = ReplayGain();
   m_albumReleaseType = CAlbum::Album;
+  m_strDateRecorded.clear();
+  m_strDateReleased.clear();
+  m_strDateOrigReleased.clear();
+  m_iYear = 0;
   m_listeners = 0;
   m_Rating = 0;
   m_Userrating = 0;
