@@ -589,7 +589,16 @@ bool CMusicDatabase::UpdateAlbum(CAlbum& album, bool OverrideTagData /* = true*/
               album.strLabel, album.strType,
               album.fRating, album.iUserrating, album.iVotes, album.iYear, album.bCompilation, album.releaseType);
 
-  if (OverrideTagData)
+  if (!OverrideTagData)
+  {
+    // Album artist(s) already exist, but may have scraped Musicbrainz ids to add
+    for (const auto &artistCredit : album.artistCredits)
+    {
+      if (!artistCredit.GetMusicBrainzArtistID().empty())
+        AddArtist(artistCredit.GetArtist(), artistCredit.GetMusicBrainzArtistID());
+    }
+  }
+  else
   {
     // Replace the album artists 
     DeleteAlbumArtistsByAlbum(album.idAlbum);

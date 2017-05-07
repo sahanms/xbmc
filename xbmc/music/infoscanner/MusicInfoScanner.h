@@ -172,11 +172,14 @@ protected:
   /*! \brief Scan in the ID3/Ogg/FLAC tags for a bunch of FileItems
    Given a list of FileItems, scan in the tags for those FileItems
    and populate a new FileItemList with the files that were successfully scanned.
+   Add album to library, populate a list of album ids added for possible scraping later.
    Any files which couldn't be scanned (no/bad tags) are discarded in the process.
    \param items [in] list of FileItems to scan
    \param scannedItems [in] list to populate with the scannedItems
    */
   int RetrieveMusicInfo(const std::string& strDirectory, CFileItemList& items);
+
+  void ScrapeInfoAddedAlbums();
 
   /*! \brief Scan in the ID3/Ogg/FLAC tags for a bunch of FileItems
     Given a list of FileItems, scan in the tags for those FileItems
@@ -216,8 +219,9 @@ protected:
   int m_scanType; // 0 - load from files, 1 - albums, 2 - artists
   CMusicDatabase m_musicDatabase;
 
-  std::map<CAlbum, CAlbum> m_albumCache;
-  std::map<CArtistCredit, CArtist> m_artistCache;
+  //std::map<CAlbum, CAlbum> m_albumCache;
+  //std::map<CArtistCredit, CArtist> m_artistCache;
+  std::vector<int> m_albumsAdded;
 
   std::set<std::string> m_pathsToScan;
   std::set<std::string> m_seenPaths;

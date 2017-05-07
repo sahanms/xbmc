@@ -206,12 +206,54 @@ CAlbum::CAlbum(const CFileItem& item)
 void CAlbum::MergeScrapedAlbum(const CAlbum& source, bool override /* = true */)
 {
   /*
-   We don't merge musicbrainz album ID so that a refresh of album information
-   allows a lookup based on name rather than directly (re)using musicbrainz.
-   In future, we may wish to be able to override lookup by musicbrainz so
-   this might be dropped.
-   */
-//  strMusicBrainzAlbumID = source.strMusicBrainzAlbumID;
+   Without original Musicbrainz album ID (was not in the music file metadata), the album name 
+   and artists are used by the scraper to identify the album. When scraped name and artists 
+   do not match original exactly it is more likely that the album has been mis-identified, and 
+   the user may want to refresh the album information repeating the lookup based on name. 
+   If a mbid is present then the scraper uses that to fetch information directly, hence 
+   storing scraped mbids has to be done with care to ensure it is an accurate identification.
+  */
+
+  // Compare original album artists with those scraped, ignoring order if more than one
+  int matchcount = 0;
+  for (const auto &artistCredit : artistCredits)
+  {
+    bool found = false;
+    auto sourceartistCredit = source.artistCredits.begin();
+    while (sourceartistCredit != source.artistCredits.end() && !found)
+    {
+      found = StringUtils::EqualsNoCase(artistCredit.GetArtist(), sourceartistCredit->GetArtist());
+      if (found)
+        matchcount++;
+      sourceartistCredit++;
+    }
+  }
+
+  /*
+  If original Musicbrainz album ID is null and both the album name and the album artist
+  names match (although not the order when more than one) then save the scraped mbid.
+  Note scraped artist credits may have mbids when the original does not, compare on name only.
+
+  A Musicbrainz album ID derived from music file tags is always taken as accurate and so can
+  not be overwritten by a scraped value.
+  */
+  if (strMusicBrainzAlbumID.empty() && !source.strMusicBrainzAlbumID.empty() && 
+      StringUtils::EqualsNoCase(strAlbum, source.strAlbum) && 
+      source.artistCredits.size() == artistCredits.size() && matchcount == artistCredits.size())
+  {   
+    strMusicBrainzAlbumID = source.strMusicBrainzAlbumID; 
+  }
+
+  /*
+  Scraping can return different album artists from the originals derived from tags. If exactly the same 
+  names then the Musicbrainz artist id also returned can be used to populate any previously missing values.
+
+  Overwritting the data derived from tags means replacing the album artists with those scraped.
+  */
+  if (override || (source.artistCredits.size() == artistCredits.size() && matchcount == artistCredits.size()))
+    artistCredits = source.artistCredits; // Stores artist mbid returned by scraper
+
+  //@todo: scraped album genre needs adding to genre and album_genre tables, this just changes the string
   if ((override && !source.genre.empty()) || genre.empty())
     genre = source.genre;
   if ((override && !source.strAlbum.empty()) || strAlbum.empty())
@@ -220,6 +262,8 @@ void CAlbum::MergeScrapedAlbum(const CAlbum& source, bool override /* = true */)
     iYear = source.iYear;
   if (override)
     bCompilation = source.bCompilation;
+  if ((override && !source.strLabel.empty()) || strLabel.empty())
+    strLabel = source.strLabel;
   //  iTimesPlayed = source.iTimesPlayed; // times played is derived from songs
 
   if ((override && !source.strArtistSort.empty()) || strArtistSort.empty())
@@ -229,7 +273,6 @@ void CAlbum::MergeScrapedAlbum(const CAlbum& source, bool override /* = true */)
     if (override || art.find(i->first) == art.end())
       art[i->first] = i->second;
   }
-  strLabel = source.strLabel;
   thumbURL = source.thumbURL;
   moods = source.moods;
   styles = source.styles;
@@ -241,12 +284,7 @@ void CAlbum::MergeScrapedAlbum(const CAlbum& source, bool override /* = true */)
   fRating = source.fRating;
   iUserrating = source.iUserrating;
   iVotes = source.iVotes;
-  if (override)
-  {
-    artistCredits = source.artistCredits;
-  }
-  else if (source.artistCredits.size() > artistCredits.size())
-    artistCredits.insert(artistCredits.end(), source.artistCredits.begin()+artistCredits.size(), source.artistCredits.end());
+  
   if (!strMusicBrainzAlbumID.empty())
   {
     /* update local songs with MB information */
