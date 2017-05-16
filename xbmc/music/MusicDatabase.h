@@ -253,7 +253,8 @@ public:
                    const std::string& strImage, const std::string& strLabel,
                    const std::string& strType,
                    float fRating, int iUserrating, int iVotes, int iYear, bool bCompilation,
-                   CAlbum::ReleaseType releaseType);
+                   CAlbum::ReleaseType releaseType,
+                   bool bScrapedMBID);
   bool ClearAlbumLastScrapedTime(int idAlbum);
   bool HasAlbumBeenScraped(int idAlbum);
   int  AddAlbumInfoSong(int idAlbum, const CSong& song);
@@ -289,7 +290,7 @@ public:
   bool GetArtistExists(int idArtist);
   int  UpdateArtist(int idArtist,
                     const std::string& strArtist, const std::string& strSortName,
-                    const std::string& strMusicBrainzArtistID,
+                    const std::string& strMusicBrainzArtistID, bool bScrapedMBID,
                     const std::string& strBorn, const std::string& strFormed,
                     const std::string& strGenres, const std::string& strMoods,
                     const std::string& strStyles, const std::string& strInstruments,

@@ -206,7 +206,7 @@ void CMusicInfoScanner::Process()
         m_musicDatabase.GetAlbum(params.GetAlbumId(), album);
         if (m_handle)
         {
-          float percentage = (float) std::distance(it, m_pathsToScan.end()) / m_pathsToScan.size();
+          float percentage = (float) std::distance(it, m_pathsToScan.end()) * 100 / m_pathsToScan.size();
           m_handle->SetText(album.GetAlbumArtistString() + " - " + album.strAlbum);
           m_handle->SetPercentage(percentage);
         }
@@ -853,7 +853,7 @@ int CMusicInfoScanner::RetrieveMusicInfo(const std::string& strDirectory, CFileI
 
 void MUSIC_INFO::CMusicInfoScanner::ScrapeInfoAddedAlbums()
 {
-  /* Strategy: Having scanned tags, made a list of albums and add them to the library, only then try
+  /* Strategy: Having scanned tags, make a list of albums and add them to the library, only then try
   to scrape additional album and artist information. Music is often tagged to a mixed standard
   - some albums have mbid tags, some don't. Once all the musc files have been added to the library,
   the mbid for an artist will be known even if it was only tagged on one song. The artist is best
@@ -867,7 +867,7 @@ void MUSIC_INFO::CMusicInfoScanner::ScrapeInfoAddedAlbums()
 
   /* Scrape additional album and artist data.
   For albums and artists without mbids, matching on album-artist pair can
-  be used to identify artist with greater accuracy then artist name alone.
+  be used to identify artist with greater accuracy than artist name alone.
   Artist mbid returned by album scraper is used if we do not already have it.
   Hence scrape album then related artists.
   */
@@ -900,7 +900,7 @@ void MUSIC_INFO::CMusicInfoScanner::ScrapeInfoAddedAlbums()
     {
       if (m_handle)
       {
-        float percentage = (float)i/m_albumsAdded.size();
+        float percentage = (float)i*100/m_albumsAdded.size();
         m_handle->SetText(album.GetAlbumArtistString() + " - " + album.strAlbum);
         m_handle->SetPercentage(percentage);
       }
@@ -956,7 +956,7 @@ void MUSIC_INFO::CMusicInfoScanner::ScrapeInfoAddedAlbums()
 void CMusicInfoScanner::FindArtForAlbums(VECALBUMS &albums, const std::string &path)
 {
   /*
-   If there's a single album in the folder, then art can be taken from
+f   If there's a single album in the folder, then art can be taken from
    the folder art.
    */
   std::string albumArt;
@@ -1064,7 +1064,7 @@ INFO_RET CMusicInfoScanner::UpdateDatabaseAlbumInfo(CAlbum& album, const ADDON::
 
 loop:
   CLog::Log(LOGDEBUG, "%s downloading info for: %s", __FUNCTION__, album.strAlbum.c_str());
-  INFO_RET albumDownloadStatus = DownloadAlbumInfo(album, scraper, albumInfo, pDialog);
+  INFO_RET albumDownloadStatus = DownloadAlbumInfo(album, scraper, albumInfo, !bAllowSelection, pDialog);
   if (albumDownloadStatus == INFO_NOT_FOUND)
   {
     if (pDialog && bAllowSelection)
@@ -1109,7 +1109,7 @@ INFO_RET CMusicInfoScanner::UpdateDatabaseArtistInfo(CArtist& artist, const ADDO
   
 loop:
   CLog::Log(LOGDEBUG, "%s downloading info for: %s", __FUNCTION__, artist.strArtist.c_str());
-  INFO_RET artistDownloadStatus = DownloadArtistInfo(artist, scraper, artistInfo, pDialog);
+  INFO_RET artistDownloadStatus = DownloadArtistInfo(artist, scraper, artistInfo, !bAllowSelection, pDialog);
   if (artistDownloadStatus == INFO_NOT_FOUND)
   {
     if (pDialog && bAllowSelection)
@@ -1141,7 +1141,7 @@ loop:
 
 #define THRESHOLD .95f
 
-INFO_RET CMusicInfoScanner::DownloadAlbumInfo(const CAlbum& album, const ADDON::ScraperPtr& info, CMusicAlbumInfo& albumInfo, CGUIDialogProgress* pDialog)
+INFO_RET CMusicInfoScanner::DownloadAlbumInfo(const CAlbum& album, const ADDON::ScraperPtr& info, CMusicAlbumInfo& albumInfo, bool bUseScrapedMBID, CGUIDialogProgress* pDialog)
 {
   if (m_handle)
   {
@@ -1154,7 +1154,14 @@ INFO_RET CMusicInfoScanner::DownloadAlbumInfo(const CAlbum& album, const ADDON::
 
   CMusicInfoScraper scraper(info);
   bool bMusicBrainz = false;
-  if (!album.strMusicBrainzAlbumID.empty())
+  /*
+  When the mbid is derived from tags scraping of album information is done directly
+  using that ID, otherwise the lookup is based on album and artist names and can mis-identify the
+  album (i.e. classical music has many "Symphony No. 5"). To be able to correct any mistakes a 
+  manual refresh of artist information uses either the mbid if derived from tags or the album
+  and artist names, not any previously scraped mbid.
+  */
+  if (!album.strMusicBrainzAlbumID.empty() && (!album.bScrapedMBID || bUseScrapedMBID))
   {
     CScraperUrl musicBrainzURL;
     if (ResolveMusicBrainz(album.strMusicBrainzAlbumID, info, musicBrainzURL))
@@ -1299,7 +1306,7 @@ INFO_RET CMusicInfoScanner::DownloadAlbumInfo(const CAlbum& album, const ADDON::
             newAlbum.strAlbum = strNewAlbum;
             newAlbum.strArtistDesc = strNewArtist;
 
-            return DownloadAlbumInfo(newAlbum, info, albumInfo, pDialog);
+            return DownloadAlbumInfo(newAlbum, info, albumInfo, bUseScrapedMBID, pDialog);
           }
           iSelectedAlbum = pDlg->GetSelectedFileItem()->m_idepth;
         }
@@ -1363,7 +1370,7 @@ void CMusicInfoScanner::GetAlbumArtwork(long id, const CAlbum &album)
   }
 }
 
-INFO_RET CMusicInfoScanner::DownloadArtistInfo(const CArtist& artist, const ADDON::ScraperPtr& info, MUSIC_GRABBER::CMusicArtistInfo& artistInfo, CGUIDialogProgress* pDialog)
+INFO_RET CMusicInfoScanner::DownloadArtistInfo(const CArtist& artist, const ADDON::ScraperPtr& info, MUSIC_GRABBER::CMusicArtistInfo& artistInfo, bool bUseScrapedMBID, CGUIDialogProgress* pDialog)
 {
   if (m_handle)
   {
@@ -1376,7 +1383,14 @@ INFO_RET CMusicInfoScanner::DownloadArtistInfo(const CArtist& artist, const ADDO
 
   CMusicInfoScraper scraper(info);
   bool bMusicBrainz = false;
-  if (!artist.strMusicBrainzArtistID.empty())
+  /*
+  When the mbid is derived from tags scraping of artist information is done directly
+  using that ID, otherwise the lookup is based on name and can mis-identify the artist
+  (many have same name). To be able to correct any mistakes a manual refresh of artist 
+  information uses either the mbid if derived from tags or the artist name, not any previously
+  scraped mbid.
+  */
+  if (!artist.strMusicBrainzArtistID.empty() && (!artist.bScrapedMBID || bUseScrapedMBID))
   {
     CScraperUrl musicBrainzURL;
     if (ResolveMusicBrainz(artist.strMusicBrainzArtistID, info, musicBrainzURL))
@@ -1489,7 +1503,7 @@ INFO_RET CMusicInfoScanner::DownloadArtistInfo(const CArtist& artist, const ADDO
 
             CArtist newArtist;
             newArtist.strArtist = strNewArtist;
-            return DownloadArtistInfo(newArtist, info, artistInfo, pDialog);
+            return DownloadArtistInfo(newArtist, info, artistInfo, bUseScrapedMBID, pDialog);
           }
           iSelectedArtist = pDlg->GetSelectedFileItem()->m_idepth;
         }

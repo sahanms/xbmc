@@ -46,6 +46,7 @@ public:
     , bCompilation(false)
     , iTimesPlayed(0)
     , releaseType(Album)
+    , bScrapedMBID(false)
   {};
   bool operator<(const CAlbum &a) const;
   void MergeScrapedAlbum(const CAlbum& album, bool override = true);
@@ -80,6 +81,7 @@ public:
     songs.clear();
     infoSongs.clear();
     releaseType = Album;
+    bScrapedMBID = false;
   }
 
   /*! \brief Get album artist names from the vector of artistcredits objects
@@ -161,6 +163,7 @@ public:
   VECSONGS songs;     ///< Local songs
   VECSONGS infoSongs; ///< Scraped songs
   ReleaseType releaseType;
+  bool bScrapedMBID;
 };
 
 typedef std::vector<CAlbum> VECALBUMS;

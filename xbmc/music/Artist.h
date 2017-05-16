@@ -73,6 +73,7 @@ public:
     idArtist = -1;
     strPath.clear();
     dateAdded.Reset();
+    bScrapedMBID = false;
   }
 
   /*! \brief Load artist information from an XML file.
@@ -105,6 +106,7 @@ public:
   CFanart fanart;
   std::vector<std::pair<std::string,std::string> > discography;
   CDateTime dateAdded;
+  bool bScrapedMBID;
 };
 
 class CArtistCredit

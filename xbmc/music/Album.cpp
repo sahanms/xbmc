@@ -206,52 +206,56 @@ CAlbum::CAlbum(const CFileItem& item)
 void CAlbum::MergeScrapedAlbum(const CAlbum& source, bool override /* = true */)
 {
   /*
-   Without original Musicbrainz album ID (was not in the music file metadata), the album name 
-   and artists are used by the scraper to identify the album. When scraped name and artists 
-   do not match original exactly it is more likely that the album has been mis-identified, and 
-   the user may want to refresh the album information repeating the lookup based on name. 
-   If a mbid is present then the scraper uses that to fetch information directly, hence 
-   storing scraped mbids has to be done with care to ensure it is an accurate identification.
+   Initial scraping of album information when there is a Musicbrainz album ID derived from 
+   tags is done directly using that ID, otherwise the lookup is based on album and artist names
+   but this can sometimes mis-identify the album (i.e. classical music has many "Symphony No. 5").
+   It is useful to store the scraped mbid, but we need to be able to correct any mistakes. Hence 
+   a manual refresh of album information uses either the mbid as derived from tags or the album 
+   and artist names, not any previously scraped mbid.
+  
+  A Musicbrainz album ID derived from music file tags is always taken as accurate and so can
+  not be overwritten by a scraped value. When the album does not already have an mbid or has
+  a previously scraped mbid, merge the new scraped value, flagging it as being from the
+  scraper rather than derived from music file tags.
   */
-
-  // Compare original album artists with those scraped, ignoring order if more than one
-  int matchcount = 0;
-  for (const auto &artistCredit : artistCredits)
+  if (!source.strMusicBrainzAlbumID.empty() && (strMusicBrainzAlbumID.empty() || bScrapedMBID))
   {
-    bool found = false;
-    auto sourceartistCredit = source.artistCredits.begin();
-    while (sourceartistCredit != source.artistCredits.end() && !found)
+    strMusicBrainzAlbumID = source.strMusicBrainzAlbumID;
+    bScrapedMBID = true;
+  }
+
+  /*
+  Scraping can return different album artists from the originals derived from tags. When overwritting
+  the data derived from tags the original album artists are replaced with those scraped. However even
+  when not overwritting derived data, for any matching artist names the Musicbrainz artist id returned 
+  by the scraper can be used to populate any previously missing Musicbrainz artist id values.
+  */
+  //@todo need to flag as from scraper if any artist mbid updated
+  if (override)
+    artistCredits = source.artistCredits; // Stores artist mbid returned by scraper    
+  else
+  {
+    // Compare original album artists with those scraped (ignoring order), and set any missing mbid
+    int matchcount = 0;
+    for (auto &artistCredit : artistCredits)
     {
-      found = StringUtils::EqualsNoCase(artistCredit.GetArtist(), sourceartistCredit->GetArtist());
-      if (found)
-        matchcount++;
-      sourceartistCredit++;
+      if (artistCredit.GetMusicBrainzArtistID().empty())
+      {
+        bool found = false;
+        auto sourceartistCredit = source.artistCredits.begin();
+        while (sourceartistCredit != source.artistCredits.end() && !found)
+        {
+          found = StringUtils::EqualsNoCase(artistCredit.GetArtist(), sourceartistCredit->GetArtist());
+          if (found)
+          {
+            artistCredit.SetMusicBrainzArtistID(sourceartistCredit->GetMusicBrainzArtistID());
+            matchcount++;
+          }
+        }
+        sourceartistCredit++;      
+      }
     }
   }
-
-  /*
-  If original Musicbrainz album ID is null and both the album name and the album artist
-  names match (although not the order when more than one) then save the scraped mbid.
-  Note scraped artist credits may have mbids when the original does not, compare on name only.
-
-  A Musicbrainz album ID derived from music file tags is always taken as accurate and so can
-  not be overwritten by a scraped value.
-  */
-  if (strMusicBrainzAlbumID.empty() && !source.strMusicBrainzAlbumID.empty() && 
-      StringUtils::EqualsNoCase(strAlbum, source.strAlbum) && 
-      source.artistCredits.size() == artistCredits.size() && matchcount == artistCredits.size())
-  {   
-    strMusicBrainzAlbumID = source.strMusicBrainzAlbumID; 
-  }
-
-  /*
-  Scraping can return different album artists from the originals derived from tags. If exactly the same 
-  names then the Musicbrainz artist id also returned can be used to populate any previously missing values.
-
-  Overwritting the data derived from tags means replacing the album artists with those scraped.
-  */
-  if (override || (source.artistCredits.size() == artistCredits.size() && matchcount == artistCredits.size()))
-    artistCredits = source.artistCredits; // Stores artist mbid returned by scraper
 
   //@todo: scraped album genre needs adding to genre and album_genre tables, this just changes the string
   if ((override && !source.genre.empty()) || genre.empty())

@@ -144,9 +144,10 @@ public:
    \param album [in] a partially or fully filled out album structure containing the search query
    \param scraper [in] the scraper to query, usually the default or the relevant scraper for the musicdb path
    \param albumInfo [in/out] a CMusicAlbumInfo struct which will be populated with the output of the scraper
+   \param bUseScrapedMBID [in] should scraper use any previously scraped mbid to identify the artist, or use artist name?
    \param pDialog [in] a progress dialog which this and downstream functions can update with status, if required
    */
-  INFO_RET DownloadAlbumInfo(const CAlbum& album, const ADDON::ScraperPtr& scraper, MUSIC_GRABBER::CMusicAlbumInfo& albumInfo, CGUIDialogProgress* pDialog = NULL);
+  INFO_RET DownloadAlbumInfo(const CAlbum& album, const ADDON::ScraperPtr& scraper, MUSIC_GRABBER::CMusicAlbumInfo& albumInfo, bool bUseScrapedMBID, CGUIDialogProgress* pDialog = NULL);
 
   /*! \brief Using the scrapers download metadata for an artist
    Given a CAlbum style struct containing some data about an artist, query
@@ -156,9 +157,10 @@ public:
    \param artist [in] a partially or fully filled out artist structure containing the search query
    \param scraper [in] the scraper to query, usually the default or the relevant scraper for the musicdb path
    \param artistInfo [in/out] a CMusicAlbumInfo struct which will be populated with the output of the scraper
+   \param bUseScrapedMBID [in] should scraper use any previously scraped mbid to identify the album, or use album and artist name?
    \param pDialog [in] a progress dialog which this and downstream functions can update with status, if required
    */
-  INFO_RET DownloadArtistInfo(const CArtist& artist, const ADDON::ScraperPtr& scraper, MUSIC_GRABBER::CMusicArtistInfo& artistInfo, CGUIDialogProgress* pDialog = NULL);
+  INFO_RET DownloadArtistInfo(const CArtist& artist, const ADDON::ScraperPtr& scraper, MUSIC_GRABBER::CMusicArtistInfo& artistInfo, bool bUseScrapedMBID, CGUIDialogProgress* pDialog = NULL);
 
   /*! \brief Search for art for an artist
    Look for art for an artist. Checks the artist structure for thumbs, and checks
