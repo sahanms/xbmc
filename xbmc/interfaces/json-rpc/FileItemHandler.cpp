@@ -387,40 +387,47 @@ void CFileItemHandler::HandleFileItem(const char *ID, bool allowFile, const char
 
 bool CFileItemHandler::FillFileItemList(const CVariant &parameterObject, CFileItemList &list)
 {
-  CAudioLibrary::FillFileItemList(parameterObject, list);
-  CVideoLibrary::FillFileItemList(parameterObject, list);
-  CFileOperations::FillFileItemList(parameterObject, list);
+  bool added = false;
+  // Check music DB id params ("artistid", "albumid", "genreid"), or for "file" 
+  // param when file with that name found in music library
+  added = CAudioLibrary::FillFileItemList(parameterObject, list);
+  // Check video DB id params, 
+  // param when file with that name found in video library
+  if (!added)
+    added = CVideoLibrary::FillFileItemList(parameterObject, list);
+  // Process "directory" parameter
+  if (!added)
+    added = CFileOperations::FillFileItemList(parameterObject, list);
+
 
   std::string file = parameterObject["file"].asString();
-  if (!file.empty() && (URIUtils::IsURL(file) || (CFile::Exists(file) && !CDirectory::Exists(file))))
+  if (!added && !file.empty() && (URIUtils::IsURL(file) || (CFile::Exists(file) && !CDirectory::Exists(file))))
   {
-    bool added = false;
-    for (int index = 0; index < list.Size(); index++)
+    CFileItemPtr item = CFileItemPtr(new CFileItem(file, false));
+    if (item->IsPicture())
     {
-      if (list[index]->GetPath() == file || list[index]->GetMusicInfoTag()->GetURL() == file || list[index]->GetVideoInfoTag()->GetPath() == file)
-      {
-        added = true;
-        break;
-      }
+      CPictureInfoTag picture;
+      picture.Load(item->GetPath());
+      *item->GetPictureInfoTag() = picture;
     }
-
-    if (!added)
+    if (item->GetLabel().empty())
     {
-      CFileItemPtr item = CFileItemPtr(new CFileItem(file, false));
-      if (item->IsPicture())
+      std::string strLabel = parameterObject["label"].asString();
+      if (!strLabel.empty())
       {
-        CPictureInfoTag picture;
-        picture.Load(item->GetPath());
-        *item->GetPictureInfoTag() = picture;
+        item->SetLabel(strLabel);
+        auto& musictag = *item->GetMusicInfoTag();
+        musictag.SetTitle(strLabel);
+        item->SetContentLookup(false);
       }
-      if (item->GetLabel().empty())
+      else
       {
         item->SetLabel(CUtil::GetTitleFromPath(file, false));
         if (item->GetLabel().empty())
           item->SetLabel(URIUtils::GetFileName(file));
       }
-      list.Add(item);
     }
+    list.Add(item);
   }
 
   return (list.Size() > 0);
