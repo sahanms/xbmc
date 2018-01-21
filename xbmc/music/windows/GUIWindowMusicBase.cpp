@@ -532,14 +532,6 @@ void CGUIWindowMusicBase::ShowSongInfo(CFileItem* pItem)
   }
 }
 
-/*
-/// \brief Can be overwritten to implement an own tag filling function.
-/// \param items File items to fill
-void CGUIWindowMusicBase::OnRetrieveMusicInfo(CFileItemList& items)
-{
-}
-*/
-
 /// \brief Retrieve tag information for \e m_vecItems
 void CGUIWindowMusicBase::RetrieveMusicInfo()
 {
@@ -1209,26 +1201,36 @@ bool CGUIWindowMusicBase::GetDirectory(const std::string &strDirectory, CFileIte
     CQueryParams params;
     CDirectoryNode::GetDatabaseInfo(items.GetPath(), params);
 
-    // Get art for directory when album or artist
+    // Get art for directory (the container) when album and/or artist known
+    // When know artist and album, only get art for the album and that album artist 
+    // (not any other album artists when album is a collaboration e.g. orchestra & conductor)
     bool artfound = false;
     std::vector<ArtForThumbLoader> art;
-    if (params.GetAlbumId() > 0)
-    { // Get album and related artist(s) art
-      artfound = m_musicdatabase.GetArtForItem(-1, params.GetAlbumId(), -1, false, art);
-    }
-    else if (params.GetArtistId() > 0)
-    { // get artist art
-      artfound = m_musicdatabase.GetArtForItem(-1, -1, params.GetArtistId(), true, art);
-    }
+    artfound = m_musicdatabase.GetArtForItem(-1, params.GetAlbumId(), params.GetArtistId(), false, art);
     if (artfound)
     {
+      std::string dirType = MediaTypeArtist;
+      if (params.GetAlbumId() > 0)
+        dirType = MediaTypeAlbum;
+
       std::map<std::string, std::string> artmap;
       for (auto artitem : art)
       {
+        /* Add art to artmap, naming according to directory type
+        For example: Directory for artist has "thumb", "fanart", "poster" etc.,
+        Directory for album has "thumb", "artist.thumb", "artist.fanart",... "artist1.thumb", "artist1.fanart" etc.,
+        */
         std::string artname;
-        artname = artitem.artType;
-        if (params.GetAlbumId() > 0 && artitem.mediaType != MediaTypeAlbum)
+        if (dirType == artitem.mediaType)
+          artname = artitem.artType;
+        else if (artitem.prefix.empty())
           artname = artitem.mediaType + "." + artitem.artType;
+        else
+        {
+          if (dirType == MediaTypeAlbum)
+            StringUtils::Replace(artitem.prefix, "albumartist", "artist");
+          artname = artitem.prefix + "." + artitem.artType;
+        }
         artmap.insert(std::make_pair(artname, artitem.url));
       }
       items.SetArt(artmap);
