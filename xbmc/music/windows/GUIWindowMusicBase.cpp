@@ -1044,6 +1044,8 @@ void CGUIWindowMusicBase::OnInitWindow()
       m_musicdatabase.SetMusicTagScanVersion();
     }
   }
+  // Conditional??
+  FillMusicSources();
 }
 
 std::string CGUIWindowMusicBase::GetStartFolder(const std::string &dir)
@@ -1111,6 +1113,18 @@ void CGUIWindowMusicBase::OnRemoveSource(int iItem)
   }
 }
 
+void CGUIWindowMusicBase::FillMusicSources()
+{
+  // Populate the source table when upgrading from previous versions of Kodi
+  VECSOURCES sources(*CMediaSourceSettings::GetInstance().GetSources("music"));
+  if (sources.empty())
+    return;
+  CMusicDatabase database;
+  database.Open();
+  database.FillSources(sources);
+  database.Close();
+}
+
 void CGUIWindowMusicBase::OnPrepareFileItems(CFileItemList &items)
 {
   CGUIMediaWindow::OnPrepareFileItems(items);
@@ -1119,7 +1133,7 @@ void CGUIWindowMusicBase::OnPrepareFileItems(CFileItemList &items)
     RetrieveMusicInfo();
 }
 
-void CGUIWindowMusicBase::OnAssignContent(const std::string &path)
+void CGUIWindowMusicBase::OnAssignContent(const std::string& strPath, const std::string& strName)
 {
   // Music scrapers are not source specific, so unlike video there is no content selection logic here.
   // Called on having added a music source, this starts scanning items into library when required
@@ -1134,8 +1148,14 @@ void CGUIWindowMusicBase::OnAssignContent(const std::string &path)
       // Edit default info provider settings so can be applied during scan
       CGUIDialogInfoProviderSettings::Show();
   }  
-  if (rep == DialogResponse::YES)  
-    g_application.StartMusicScan(path, true);
+  if (rep == DialogResponse::YES)
+  {
+    CMusicDatabase database;
+    database.Open();
+    database.AddSource(strPath, strName);
+    database.Close();
+    g_application.StartMusicScan(strPath, true);
+  }
   
 }
 

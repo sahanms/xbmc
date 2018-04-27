@@ -455,7 +455,7 @@ void CGUIDialogMediaSource::OnOK()
       if (m_type == "video" && !URIUtils::IsLiveTV(share.strPath))
         CGUIWindowVideoBase::OnAssignContent(share.strPath);
       else if (m_type == "music")
-        CGUIWindowMusicBase::OnAssignContent(share.strPath);
+        CGUIWindowMusicBase::OnAssignContent(share.strPath, share.strName);
     }
   }
 

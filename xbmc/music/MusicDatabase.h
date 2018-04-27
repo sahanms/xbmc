@@ -238,6 +238,7 @@ public:
    \param strType album type (Musicbrainz release type e.g. "Broadcast, Soundtrack, live"), 
    \param bCompilation if the album is a compilation
    \param releaseType "album" or "single"
+   \param strSource path of music source that groups albums together
    \return the id of the album
    */
   int  AddAlbum(const std::string& strAlbum, const std::string& strMusicBrainzAlbumID,
@@ -245,7 +246,8 @@ public:
                 const std::string& strArtist, const std::string& strArtistSort, 
                 const std::string& strGenre, int year,
                 const std::string& strRecordLabel, const std::string& strType,
-                bool bCompilation, CAlbum::ReleaseType releaseType);
+                bool bCompilation, CAlbum::ReleaseType releaseType, 
+                int idSource);
 
   /*! \brief retrieve an album, optionally with all songs.
    \param idAlbum the database id of the album.
@@ -350,6 +352,12 @@ public:
   bool GetAlbumFolder(const CAlbum& album, const std::string &strAlbumPath, std::string &strFolder);
   bool GetArtistFolderName(const CArtist& artist, std::string &strFolder);
   bool GetArtistFolderName(const std::string &strArtist, const std::string &strMusicBrainzArtistID, std::string &strFolder);
+
+  int GetSource(const std::string& strPath);
+  int AddNewSource(const std::string& strPath, const std::string& strName);
+  int AddSource(const std::string& strPath, const std::string& strName);
+  int AddSource(const std::string& strPath);
+  int FillSources(const VECSOURCES& sources);
 
   /////////////////////////////////////////////////
   // Genres
@@ -626,6 +634,7 @@ private:
   bool CleanupGenres();
   bool CleanupInfoSettings();
   bool CleanupRoles();
+  bool CleanupSources();
   void UpdateTables(int version) override;
   bool SearchArtists(const std::string& search, CFileItemList &artists);
   bool SearchAlbums(const std::string& search, CFileItemList &albums);

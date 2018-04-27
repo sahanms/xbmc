@@ -85,6 +85,7 @@ public:
     strLastScraped.clear();
     bScrapedMBID = false;
     bArtistSongMerge = false;
+    idSourcePath = -1;
   }
 
   /*! \brief Get album artist names from the vector of artistcredits objects
@@ -185,6 +186,7 @@ public:
   std::string strLastScraped;
   bool bScrapedMBID;
   bool bArtistSongMerge;
+  int idSourcePath;
 };
 
 typedef std::vector<CAlbum> VECALBUMS;
