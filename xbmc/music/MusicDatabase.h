@@ -29,6 +29,7 @@
 #include "Album.h"
 #include "dbwrappers/Database.h"
 #include "MusicDbUrl.h"
+#include "MediaSource.h"
 #include "settings/LibExportSettings.h"
 #include "utils/SortUtils.h"
 
@@ -217,9 +218,10 @@ public:
   /////////////////////////////////////////////////
   /*! \brief Add an album and all its songs to the database
   \param album the album to add
+  \param idSource the music source id
   \return the id of the album
   */
-  bool AddAlbum(CAlbum& album);
+  bool AddAlbum(CAlbum& album, int idSource);
 
   /*! \brief Update an album and all its nested entities (artists, songs etc)
    \param album the album to update
@@ -352,11 +354,28 @@ public:
   bool GetArtistFolderName(const std::string &strArtist, const std::string &strMusicBrainzArtistID, std::string &strFolder);
 
   /////////////////////////////////////////////////
+  // Sources
+  /////////////////////////////////////////////////
+  bool UpdateSources();
+  int AddSource(const std::string& strName, const std::string& strMultipath, const std::vector<std::string>& vecPaths, int id = -1);
+  int UpdateSource(const std::string& strOldName, const std::string& strName, const std::string& strMultipath, const std::vector<std::string>& vecPaths);
+  bool RemoveSource(const std::string& strName);
+  int GetSourceFromPath(const std::string& strPath);
+  bool AddAlbumSource(int idAlbum, int idSource);
+  bool AddAlbumSources(int idAlbum,  const std::string& strPath);
+  bool GetSources(CFileItemList& items);
+
+  bool GetSourcesByArtist(int idArtist, CFileItem* item);
+  bool GetSourcesByAlbum(int idAlbum, CFileItem* item);
+  bool GetSourcesBySong(int idSong, const std::string& strPath, CFileItem* item);
+
+  /////////////////////////////////////////////////
   // Genres
   /////////////////////////////////////////////////
   int AddGenre(std::string& strGenre);
   std::string GetGenreById(int id);
   int GetGenreByName(const std::string& strGenre);
+  bool GetGenresJSON(CFileItemList& items, bool bSources = false);
 
   /////////////////////////////////////////////////
   // Link tables
@@ -425,6 +444,7 @@ public:
   bool GetGenresNav(const std::string& strBaseDir, CFileItemList& items, const Filter &filter = Filter(), bool countOnly = false);
   bool GetYearsNav(const std::string& strBaseDir, CFileItemList& items, const Filter &filter = Filter());
   bool GetRolesNav(const std::string& strBaseDir, CFileItemList& items, const Filter &filter = Filter());
+  bool GetSourcesNav(const std::string& strBaseDir, CFileItemList& items, const Filter &filter = Filter());
   bool GetArtistsNav(const std::string& strBaseDir, CFileItemList& items, bool albumArtistsOnly = false, int idGenre = -1, int idAlbum = -1, int idSong = -1, const Filter &filter = Filter(), const SortDescription &sortDescription = SortDescription(), bool countOnly = false);
   bool GetCommonNav(const std::string &strBaseDir, const std::string &table, const std::string &labelField, CFileItemList &items, const Filter &filter /* = Filter() */, bool countOnly /* = false */);
   bool GetAlbumTypesNav(const std::string &strBaseDir, CFileItemList &items, const Filter &filter = Filter(), bool countOnly = false);
@@ -634,6 +654,11 @@ private:
   bool SearchAlbums(const std::string& search, CFileItemList &albums);
   bool SearchSongs(const std::string& strSearch, CFileItemList &songs);
   int GetSongIDFromPath(const std::string &filePath);
+
+  /*! \brief Checks that source table matches sources.xml
+  returns true when they do 
+  */
+  bool CheckSources(VECSOURCES& sources);
 
   bool m_translateBlankArtist;
 

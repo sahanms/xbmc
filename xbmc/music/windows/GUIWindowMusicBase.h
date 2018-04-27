@@ -51,10 +51,13 @@ public:
   void DoScan(const std::string &strPath, bool bRescan = false);
   void RefreshContent(const std::string& strContent);
 
-  /*! \brief Prompt the user if he wants to start a scan for this folder
-  \param path the path to assign content for
+  /*! \brief Once a music source is added, store source in library, and prompt
+  the user to scan this folder into the library
+  \param strPath the music source path
+  \param strName the name of the music source
   */
-  static void OnAssignContent(const std::string &path);
+  static void OnAssignContent(const std::string& oldName, const CMediaSource& source);
+
 protected:
   void OnInitWindow() override;
   /*!
@@ -96,7 +99,7 @@ protected:
   void OnRipTrack(int iItem);
   void LoadPlayList(const std::string& strPlayList) override;
   virtual void OnRemoveSource(int iItem);
-
+    
   typedef std::vector <CFileItem*>::iterator ivecItems; ///< CFileItem* vector Iterator
   CGUIDialogProgress* m_dlgProgress; ///< Progress dialog
 
