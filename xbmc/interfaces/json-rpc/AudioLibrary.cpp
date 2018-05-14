@@ -35,6 +35,7 @@
 #include "filesystem/Directory.h"
 #include "settings/Settings.h"
 #include "settings/AdvancedSettings.h"
+#include "settings/MediaSourceSettings.h"
 #include "TextureDatabase.h"
 
 using namespace MUSIC_INFO;
@@ -126,7 +127,7 @@ JSONRPC_STATUS CAudioLibrary::GetArtists(const std::string &method, ITransportLa
     param["properties"] = CVariant(CVariant::VariantTypeArray);
   param["properties"].append("artist");
 
-  //Get roleids, songgenreids etc, if needed
+  //Get roleids, songgenreids, sources etc, if needed
   JSONRPC_STATUS ret = GetAdditionalArtistDetails(parameterObject, items, musicdatabase);
   if (ret != OK)
     return ret;
@@ -490,13 +491,17 @@ JSONRPC_STATUS CAudioLibrary::GetGenres(const std::string &method, ITransportLay
   if (!musicdatabase.Open())
     return InternalError;
 
+  // Check if sources for genre wanted
+  bool sourcesneeded(false);
+  std::set<std::string> checkProperties;
+  checkProperties.insert("sources");
+  std::set<std::string> additionalProperties;
+  if (CheckForAdditionalProperties(parameterObject["properties"], checkProperties, additionalProperties))
+    sourcesneeded = (additionalProperties.find("sources") != additionalProperties.end());
+   
   CFileItemList items;
-  if (!musicdatabase.GetGenresNav("musicdb://genres/", items))
+  if (!musicdatabase.GetGenresJSON(items, sourcesneeded))
     return InternalError;
-
-  /* need to set strTitle in each item*/
-  for (unsigned int i = 0; i < (unsigned int)items.Size(); i++)
-    items[i]->GetMusicInfoTag()->SetTitle(items[i]->GetLabel());
 
   HandleFileItemList("genreid", false, "genres", items, parameterObject, result);
   return OK;
@@ -517,6 +522,60 @@ JSONRPC_STATUS CAudioLibrary::GetRoles(const std::string &method, ITransportLaye
     items[i]->GetMusicInfoTag()->SetTitle(items[i]->GetLabel());
 
   HandleFileItemList("roleid", false, "roles", items, parameterObject, result);
+  return OK;
+}
+
+JSONRPC_STATUS JSONRPC::CAudioLibrary::GetSources(const std::string& method, ITransportLayer* transport, IClient* client, const CVariant& parameterObject, CVariant& result)
+{
+  CMusicDatabase musicdatabase;
+  if (!musicdatabase.Open())
+    return InternalError;
+
+  bool libonly = false;
+  if (parameterObject["libraryonly"].isBoolean())
+    libonly = parameterObject["libraryonly"].asBoolean();
+
+  CFileItemList items;
+  // Get sources that have been scanned into the music library
+  if (!musicdatabase.GetSources(items))
+    return InternalError;
+
+  if (!libonly)
+  {
+    // Get other music sources from sources.xml 
+    // These are either not scanned, subfolders of other scanned sources or duplicates
+    VECSOURCES sources(*CMediaSourceSettings::GetInstance().GetSources("music"));
+    if (!sources.empty())
+    {
+      CFileItemList nonlibitems;
+      for (const auto& source : sources)
+      {
+        // Do not show sources which are locked
+        if (source.m_iHasLock == 2)
+          continue;
+        // Check for path in list of sources scanned to library
+        if (!items.Get(source.strPath))
+        {
+          // Add source to list
+          CFileItemPtr pMediaSource(new CFileItem(source));
+          if (pMediaSource->IsSmb())
+          {
+            CURL url(pMediaSource->GetPath());
+            pMediaSource->SetPath(url.GetWithoutUserDetails());
+          }
+          // Set music properties like source items from music db
+          // "file" propetry read from tag URL
+          pMediaSource->GetMusicInfoTag()->SetTitle(pMediaSource->GetLabel());
+          pMediaSource->GetMusicInfoTag()->SetURL(pMediaSource->GetPath());
+          nonlibitems.Add(pMediaSource);
+        }
+      }
+      // Append the additional (non-library) music sources
+      items.Append(nonlibitems);
+    }
+  }
+
+  HandleFileItemList("sourceid", true, "sources", items, parameterObject, result);
   return OK;
 }
 
@@ -945,6 +1004,13 @@ void CAudioLibrary::FillAlbumItem(const CAlbum &album, const std::string &path, 
   // Add album artistIds as separate property as not part of CMusicInfoTag
   std::vector<int> artistids = album.GetArtistIDArray();
   FillItemArtistIDs(artistids, item);
+  // Add album source as single element array property as not part of CMusicInfoTag
+  CVariant sourceObj;
+  sourceObj["title"] = album.strSourceName;
+  sourceObj["sourceid"] = album.idSourcePath;
+  CVariant artistSources(CVariant::VariantTypeArray);
+  artistSources.push_back(sourceObj);
+  item->SetProperty("sources", artistSources);
 }
 
 JSONRPC_STATUS CAudioLibrary::GetAdditionalDetails(const CVariant &parameterObject, CFileItemList &items)
@@ -972,6 +1038,7 @@ JSONRPC_STATUS CAudioLibrary::GetAdditionalArtistDetails(const CVariant &paramet
   checkProperties.insert("roles");
   checkProperties.insert("songgenres");
   checkProperties.insert("isalbumartist");
+  checkProperties.insert("sources");
   std::set<std::string> additionalProperties;
   if (!CheckForAdditionalProperties(parameterObject["properties"], checkProperties, additionalProperties))
     return OK;
@@ -1000,6 +1067,15 @@ JSONRPC_STATUS CAudioLibrary::GetAdditionalArtistDetails(const CVariant &paramet
       musicdatabase.GetIsAlbumArtist(item->GetMusicInfoTag()->GetDatabaseId(), item.get());
     }
   }
+  if (additionalProperties.find("sources") != additionalProperties.end())
+  {
+    for (int i = 0; i < items.Size(); i++)
+    {
+      CFileItemPtr item = items[i];
+      musicdatabase.GetSourcesByArtist(item->GetMusicInfoTag()->GetDatabaseId(), item.get());
+    }
+  }
+
   return OK;
 }
 

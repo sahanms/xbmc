@@ -358,6 +358,9 @@ public:
   int AddSource(const std::string& strPath, const std::string& strName);
   int AddSource(const std::string& strPath);
   int FillSources(const VECSOURCES& sources);
+  bool GetSources(CFileItemList& items);
+
+  bool GetSourcesByArtist(int idArtist, CFileItem* item);
 
   /////////////////////////////////////////////////
   // Genres
@@ -365,6 +368,7 @@ public:
   int AddGenre(std::string& strGenre);
   std::string GetGenreById(int id);
   int GetGenreByName(const std::string& strGenre);
+  bool GetGenresJSON(CFileItemList& items, bool bSources = false);
 
   /////////////////////////////////////////////////
   // Link tables
@@ -433,6 +437,7 @@ public:
   bool GetGenresNav(const std::string& strBaseDir, CFileItemList& items, const Filter &filter = Filter(), bool countOnly = false);
   bool GetYearsNav(const std::string& strBaseDir, CFileItemList& items, const Filter &filter = Filter());
   bool GetRolesNav(const std::string& strBaseDir, CFileItemList& items, const Filter &filter = Filter());
+  bool GetSourcesNav(const std::string& strBaseDir, CFileItemList& items, const Filter &filter = Filter());
   bool GetArtistsNav(const std::string& strBaseDir, CFileItemList& items, bool albumArtistsOnly = false, int idGenre = -1, int idAlbum = -1, int idSong = -1, const Filter &filter = Filter(), const SortDescription &sortDescription = SortDescription(), bool countOnly = false);
   bool GetCommonNav(const std::string &strBaseDir, const std::string &table, const std::string &labelField, CFileItemList &items, const Filter &filter /* = Filter() */, bool countOnly /* = false */);
   bool GetAlbumTypesNav(const std::string &strBaseDir, CFileItemList &items, const Filter &filter = Filter(), bool countOnly = false);
@@ -701,6 +706,8 @@ private:
     album_iUserrating,
     album_iVotes,
     album_bCompilation,
+    album_idSource,
+    album_strSourceName,
     album_bScrapedMBID,
     album_lastScraped,
     album_iTimesPlayed,

@@ -187,6 +187,7 @@ public:
   bool bScrapedMBID;
   bool bArtistSongMerge;
   int idSourcePath;
+  std::string strSourceName;
 };
 
 typedef std::vector<CAlbum> VECALBUMS;

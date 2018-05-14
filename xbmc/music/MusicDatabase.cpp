@@ -331,6 +331,8 @@ m_pDS->exec("CREATE VIEW albumview AS SELECT "
   "        album.iUserrating, "
   "        album.iVotes, "
   "        bCompilation, "
+  "        idSource, "
+  "        (SELECT strName FROM source WHERE source.idSource = album.idSource) AS sourceName, "
   "        bScrapedMBID,"
   "        lastScraped,"
   "        (SELECT ROUND(AVG(song.iTimesPlayed)) FROM song WHERE song.idAlbum = album.idAlbum) AS iTimesPlayed, "
@@ -2224,6 +2226,8 @@ CAlbum CMusicDatabase::GetAlbumFromDataset(const dbiplus::sql_record* const reco
   album.strLabel = record->at(offset + album_strLabel).get_asString();
   album.strType = record->at(offset + album_strType).get_asString();
   album.bCompilation = record->at(offset + album_bCompilation).get_asInt() == 1;
+  album.idSourcePath = record->at(offset + album_idSource).get_asInt() == 1;
+  album.strSourceName = record->at(offset + album_strSourceName).get_asString();
   album.bScrapedMBID = record->at(offset + album_bScrapedMBID).get_asInt() == 1;
   album.strLastScraped = record->at(offset + album_lastScraped).get_asString();
   album.iTimesPlayed = record->at(offset + album_iTimesPlayed).get_asInt();
@@ -3898,6 +3902,66 @@ bool CMusicDatabase::GetRolesNav(const std::string& strBaseDir, CFileItemList& i
     CLog::Log(LOGERROR, "%s failed", __FUNCTION__);
   }
   return false;
+}
+
+bool CMusicDatabase::GetSourcesNav(const std::string& strBaseDir, CFileItemList& items, const Filter& filter)
+try
+{
+  if (NULL == m_pDB.get()) return false;
+  if (NULL == m_pDS.get()) return false;
+
+  Filter extFilter = filter;
+  CMusicDbUrl musicUrl;
+  SortDescription sorting;
+  if (!musicUrl.FromString(strBaseDir) || !GetFilter(musicUrl, extFilter, sorting))
+    return false;
+
+  // Get sources with albums having that source
+  std::string strSQL = "SELECT DISTINCT source.idSource, source.strName FROM source "  
+    "JOIN album ON source.idSource = album.idSource "
+    "ORDER BY source.idsource";
+
+  if (!BuildSQL(strSQL, extFilter, strSQL))
+    return false;
+
+  // run query
+  CLog::Log(LOGDEBUG, "%s query: %s", __FUNCTION__, strSQL.c_str());
+  if (!m_pDS->query(strSQL))
+    return false;
+  int iRowsFound = m_pDS->num_rows();
+  if (iRowsFound == 0)
+  {
+    m_pDS->close();
+    return true;
+  }
+
+  // get data from returned rows
+  while (!m_pDS->eof())
+  {
+    std::string labelValue = m_pDS->fv("source.strName").get_asString();
+    CFileItemPtr pItem(new CFileItem(labelValue));
+    pItem->GetMusicInfoTag()->SetTitle(labelValue);
+    pItem->GetMusicInfoTag()->SetDatabaseId(m_pDS->fv("source.idSource").get_asInt(), "source");
+    CMusicDbUrl itemUrl = musicUrl;
+    std::string strDir = StringUtils::Format("%i/", m_pDS->fv("source.idSource").get_asInt());
+    itemUrl.AppendPath(strDir);
+    itemUrl.AddOption("sourceid", m_pDS->fv("source.idSource").get_asInt());
+    pItem->SetPath(itemUrl.ToString());
+
+    pItem->m_bIsFolder = true;
+    items.Add(pItem);
+
+    m_pDS->next();
+  }
+
+  // cleanup
+  m_pDS->close();
+
+  return true;
+}
+catch (...)
+{
+  CLog::Log(LOGERROR, "%s failed", __FUNCTION__);
 }
 
 bool CMusicDatabase::GetAlbumsByYear(const std::string& strBaseDir, CFileItemList& items, int year)
@@ -6006,6 +6070,112 @@ int CMusicDatabase::FillSources(const VECSOURCES& sources)
 
 }
 
+bool CMusicDatabase::GetSources(CFileItemList& items)
+try
+{
+  if (NULL == m_pDB.get()) return false;
+  if (NULL == m_pDS.get()) return false;
+
+  // Get sources with albums having that source
+  std::string strSQL = "SELECT DISTINCT source.idSource, source.strName, source.strPath "
+    "FROM source JOIN album ON source.idSource = album.idSource "
+    "ORDER BY source.idsource";
+  
+  CLog::Log(LOGDEBUG, "%s query: %s", __FUNCTION__, strSQL.c_str());
+  if (!m_pDS->query(strSQL))
+    return false;
+  int iRowsFound = m_pDS->num_rows();
+  if (iRowsFound == 0)
+  {
+    m_pDS->close();
+    return true;
+  }
+
+  // get data from returned rows
+  while (!m_pDS->eof())
+  {
+    std::string labelValue = m_pDS->fv("source.strName").get_asString();
+    CFileItemPtr pItem(new CFileItem(labelValue));
+    pItem->GetMusicInfoTag()->SetTitle(labelValue);
+    pItem->GetMusicInfoTag()->SetDatabaseId(m_pDS->fv("source.idSource").get_asInt(), "source");
+    // Set tag URL for "file" property in AudioLibary processing
+    pItem->GetMusicInfoTag()->SetURL(m_pDS->fv("source.strPath").get_asString()); 
+    // Set source path (rather than VFS path), so AudioLibary can check source in list
+    pItem->SetPath(m_pDS->fv("source.strPath").get_asString());
+
+    pItem->m_bIsFolder = true;
+    items.Add(pItem);
+
+    m_pDS->next();
+  }
+
+  // cleanup
+  m_pDS->close();
+
+  return true;
+}
+catch (...)
+{
+  CLog::Log(LOGERROR, "%s failed", __FUNCTION__);
+}
+
+bool CMusicDatabase::GetSourcesByArtist(int idArtist, CFileItem* item)
+{
+  try
+  {
+    std::string strSQL;
+    strSQL = PrepareSQL("SELECT DISTINCT album.idSource, source.strName FROM artist "
+      "JOIN album_artist ON album_artist.idArtist = artist.idArtist "
+      "JOIN album ON album_artist.idAlbum = album.idAlbum "
+      "JOIN source ON source.idSource = album.idSource "
+      "WHERE artist.idArtist = %i "
+      "ORDER BY source.idsource", idArtist);
+    if (!m_pDS->query(strSQL))
+      return false;
+    if (m_pDS->num_rows() == 0)
+    {
+      // Artist does have any source via albums may not be an album artist.
+      // Check via songs fetch sources from compilations or where they are guest artist
+      m_pDS->close();
+      strSQL = PrepareSQL("SELECT DISTINCT album.idSource, source.strName FROM artist "
+        "JOIN song_artist ON song_artist.idArtist = artist.idArtist "
+        "JOIN song ON song_artist.idSong = song.idSong "
+        "JOIN album ON song.idAlbum = album.idAlbum "
+        "JOIN source ON source.idSource = album.idSource "       
+        "WHERE artist.idArtist = %i "
+        "ORDER BY source.idsource", idArtist);
+      if (!m_pDS->query(strSQL))
+        return false;
+      if (m_pDS->num_rows() == 0)
+      {
+        //No sources, but query sucessfull
+        m_pDS->close();
+        return true;
+      }
+    }
+
+    CVariant artistSources(CVariant::VariantTypeArray);
+
+    while (!m_pDS->eof())
+    {
+      CVariant sourceObj;
+      sourceObj["title"] = m_pDS->fv("strName").get_asString();
+      sourceObj["sourceid"] = m_pDS->fv("idSource").get_asInt();
+      artistSources.push_back(sourceObj);
+      m_pDS->next();
+    }
+    m_pDS->close();
+
+    item->SetProperty("sources", artistSources);
+    return true;
+  }
+  catch (...)
+  {
+    CLog::Log(LOGERROR, "%s(%i) failed", __FUNCTION__, idArtist);
+  }
+  return false;
+}
+
 int CMusicDatabase::GetArtistByName(const std::string& strArtist)
 {
   try
@@ -6315,6 +6485,107 @@ int CMusicDatabase::GetGenreByName(const std::string& strGenre)
     CLog::Log(LOGERROR, "%s failed", __FUNCTION__);
   }
   return -1;
+}
+
+bool CMusicDatabase::GetGenresJSON(CFileItemList& items, bool bSources)
+{
+  std::string strSQL;
+  try
+  {
+    if (NULL == m_pDB.get()) return false;
+    if (NULL == m_pDS.get()) return false;
+
+    strSQL = "SELECT %s FROM genre ";
+    Filter extFilter;
+    extFilter.AppendField("genre.idGenre");
+    extFilter.AppendField("genre.strGenre");
+    if (bSources)
+    {
+      strSQL = "SELECT DISTINCT %s FROM genre ";
+      extFilter.AppendField("source.idSource");
+      extFilter.AppendField("source.strName");
+      extFilter.AppendJoin("JOIN song_genre ON song_genre.idGenre = genre.idGenre");
+      extFilter.AppendJoin("JOIN song ON song.idSong = song_genre.idSong");
+      extFilter.AppendJoin("JOIN album ON album.idAlbum = song.idAlbum");
+      extFilter.AppendJoin("JOIN source on album.idSource = source.idSource");
+      extFilter.AppendOrder("genre.strGenre");
+      extFilter.AppendOrder("source.idSource");
+    }   
+    extFilter.AppendWhere("genre.strGenre != ''");
+
+    std::string strSQLExtra;
+    if (!BuildSQL(strSQLExtra, extFilter, strSQLExtra))
+      return false;
+   
+    strSQL = PrepareSQL(strSQL.c_str(), extFilter.fields.c_str()) + strSQLExtra;
+
+
+    // run query
+    CLog::Log(LOGDEBUG, "%s query: %s", __FUNCTION__, strSQL.c_str());
+
+    if (!m_pDS->query(strSQL))
+      return false;
+    int iRowsFound = m_pDS->num_rows();
+    if (iRowsFound == 0)
+    {
+      m_pDS->close();
+      return true;
+    }
+
+    if (!bSources)
+      items.Reserve(iRowsFound);
+
+    // Get data from returned rows
+    // Item has genre name and ID in MusicInfotag, VFS path, and sources in property
+    CVariant genreSources(CVariant::VariantTypeArray);
+    int idGenre = -1;
+    while (!m_pDS->eof())
+    {
+      if (idGenre != m_pDS->fv("genre.idGenre").get_asInt())
+      { // New genre
+        if (idGenre > 0 && !genreSources.empty())
+        {
+          //Store sources for previous genre in item list
+          items[items.Size() - 1].get()->SetProperty("sources", genreSources);
+          genreSources.clear();
+        }
+        idGenre = m_pDS->fv("genre.idGenre").get_asInt();       
+        std::string strGenre = m_pDS->fv("genre.strGenre").get_asString();
+        CFileItemPtr pItem(new CFileItem(strGenre));
+        pItem->GetMusicInfoTag()->SetTitle(strGenre);
+        pItem->GetMusicInfoTag()->SetGenre(strGenre);
+        pItem->GetMusicInfoTag()->SetDatabaseId(idGenre, "genre");
+        pItem->SetPath(StringUtils::Format("musicdb://genres/%i/", idGenre));
+        pItem->m_bIsFolder = true;
+        items.Add(pItem);
+      }
+      // Get source data
+      if (bSources)
+      {
+        CVariant sourceObj;
+        sourceObj["title"] = m_pDS->fv("source.strName").get_asString();
+        sourceObj["sourceid"] = m_pDS->fv("source.idSource").get_asInt();
+        genreSources.push_back(sourceObj);
+      }     
+      m_pDS->next();
+    }
+    if (!genreSources.empty())
+    {
+      //Store sources for final genre
+      items[items.Size() - 1].get()->SetProperty("sources", genreSources);
+      genreSources.clear();
+    }
+
+    // cleanup
+    m_pDS->close();
+
+    return true;
+  }
+  catch (...)
+  {
+    CLog::Log(LOGERROR, "%s (%s) failed", __FUNCTION__, strSQL.c_str());
+  }
+  return false;
 }
 
 bool CMusicDatabase::GetRandomSong(CFileItem* item, int& idSong, const Filter &filter)

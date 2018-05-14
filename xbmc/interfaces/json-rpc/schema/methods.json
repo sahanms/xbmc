@@ -937,6 +937,27 @@
       }
     }
   },
+  "AudioLibrary.GetSources": {
+    "type": "method",
+    "description": "Get all music sources, optionally only those scanned into the library",
+    "transport": "Response",
+    "permission": "ReadData",
+    "params": [
+      { "name": "properties", "$ref": "Library.Fields.Source" },
+      { "name": "libraryonly", "$ref": "Optional.Boolean", "description": "Whether or not to only include sources that have been scanned into the music library" , "default": false },
+      { "name": "limits", "$ref": "List.Limits" },
+      { "name": "sort", "$ref": "List.Sort" }
+    ],
+    "returns": {
+      "type": "object",
+      "properties": {
+        "limits": { "$ref": "List.LimitsReturned", "required": true },
+        "sources": { "type": "array", "required": true,
+          "items": { "$ref": "Library.Details.Source" }
+        }
+      }
+    }
+  },
   "AudioLibrary.GetRoles": {
     "type": "method",
     "description": "Retrieve all contributor roles",
