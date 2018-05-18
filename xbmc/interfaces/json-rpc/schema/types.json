@@ -416,16 +416,37 @@
     "type": "object",
     "additionalProperties": { "type": [ "null", { "$ref": "Global.String.NotEmpty", "required": true } ] }
   },
+  "Library.Fields.Source": {
+    "extends": "Item.Fields.Base",
+    "items": { "type": "string", "enum": [ "file", "paths" ] }
+  },
+  "Library.Details.Source": {
+    "extends": "Item.Details.Base",
+    "properties": {
+      "sourceid": { "$ref": "Library.Id", "required": true },
+      "file": { "type": "string", "required": true },
+	  "paths": { "$ref": "Array.String" }
+    }
+  },
+  "Library.Details.Sources": {
+    "type": "array",
+    "items": { "type": "object",
+      "properties": {
+        "sourceid": { "$ref": "Library.Id", "required": true }
+	  }
+    }
+  },
   "Library.Fields.Genre": {
     "extends": "Item.Fields.Base",
-    "items": { "type": "string", "enum": [ "title", "thumbnail" ] }
+    "items": { "type": "string", "enum": [ "title", "thumbnail", "sources" ] }
   },
   "Library.Details.Genre": {
     "extends": "Item.Details.Base",
     "properties": {
       "genreid": { "$ref": "Library.Id", "required": true },
       "title": { "type": "string" },
-      "thumbnail": { "type": "string" }
+      "thumbnail": { "type": "string" },
+      "sources": {"$ref": "Library.Details.Sources"}
     }
   },
   "Library.Fields.Tag": {
@@ -453,19 +474,19 @@
   "Audio.Fields.Artist": {
     "extends": "Item.Fields.Base",
     "items": { "type": "string",
-      "description": "Requesting the (song)genreid/genre, or roleid/role fields will result in increased response times",
+      "description": "Requesting the (song)genreid/genre, roleid/role or sources fields will result in increased response times",
       "enum": [ "instrument", "style", "mood", "born", "formed",
                 "description", "genre", "died", "disbanded",
                 "yearsactive", "musicbrainzartistid", "fanart",
                 "thumbnail", "compilationartist", "dateadded",
                 "roles", "songgenres", "isalbumartist", 
-                "sortname", "type", "gender", "disambiguation", "art"]
+                "sortname", "type", "gender", "disambiguation", "art", "sources"]
     }
   },
   "Audio.Fields.Album": {
     "extends": "Item.Fields.Base",
     "items": { "type": "string",
-      "description": "Requesting the songgenres and/or artistid field will result in increased response times",
+      "description": "Requesting the songgenres, artistid and/or sources fields will result in increased response times",
       "enum": [ "title", "description", "artist", "genre",
                 "theme", "mood", "style", "type", "albumlabel",
                 "rating", "votes", "userrating","year", "musicbrainzalbumid",
@@ -473,13 +494,13 @@
                 "playcount", "artistid", "displayartist",
                 "compilation", "releasetype", "dateadded",
                 "sortartist", "musicbrainzreleasegroupid", "songgenres", "art", 
-                "lastplayed"]
+                "lastplayed", "sources"]
     }
   },
   "Audio.Fields.Song": {
     "extends": "Item.Fields.Base",
     "items": { "type": "string",
-      "description": "Requesting the genreid, artistid and/or albumartistid field will result in increased response times",
+      "description": "Requesting the genreid, artistid, albumartistid and/or sources fields will result in increased response times",
       "enum": [ "title", "artist", "albumartist", "genre", "year",
                 "rating", "album", "track", "duration", "comment", 
                 "lyrics", "musicbrainztrackid", "musicbrainzartistid",
@@ -489,7 +510,7 @@
                 "albumartistid", "albumreleasetype", "dateadded", 
                 "votes", "userrating", "mood", "contributors",
                 "displaycomposer", "displayconductor", "displayorchestra", "displaylyricist",
-                "sortartist", "art"]
+                "sortartist", "art", "sources"]
     }
   },
   "Audio.Album.ReleaseType": {
@@ -575,7 +596,8 @@
       "sortname": { "type": "string" },
       "type": { "type": "string" },
       "gender": { "type": "string" },
-      "disambiguation": { "type": "string" }
+      "disambiguation": { "type": "string" },
+	  "sources": {"$ref": "Library.Details.Sources"}
     }
   },
   "Audio.Details.Album": {
@@ -594,7 +616,8 @@
       "musicbrainzreleasegroupid": { "type": "string" },
       "musicbrainzalbumid": { "type": "string" },
       "songgenres": {"$ref": "Audio.Details.Genres"},
-      "lastplayed": { "type": "string" }
+      "lastplayed": { "type": "string" },
+      "sources": {"$ref": "Library.Details.Sources"}
     }
   },
   "Audio.Details.Song": {
@@ -622,7 +645,8 @@
       "displayconductor": { "type": "string"},
       "displayorchestra": { "type": "string"},
       "displaylyricist": { "type": "string"},
-      "genreid": { "$ref": "Array.Integer"}
+      "genreid": { "$ref": "Array.Integer"},
+      "sources": {"$ref": "Library.Details.Sources"}
     }
   },
   "Audio.Property.Name": {
@@ -1486,7 +1510,7 @@
                 "disc", "tag", "art", "genreid", "displayartist", "albumartistid",
                 "description", "theme", "mood", "style", "albumlabel", "sorttitle",
                 "episodeguide", "uniqueid", "dateadded", "size", "lastmodified", "mimetype",
-                "specialsortseason", "specialsortepisode", "sortartist", "musicbrainzreleasegroupid"]
+                "specialsortseason", "specialsortepisode", "sortartist", "musicbrainzreleasegroupid" ]
     }
   },
   "List.Item.File": {
