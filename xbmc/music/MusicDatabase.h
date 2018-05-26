@@ -380,7 +380,6 @@ public:
   int AddGenre(std::string& strGenre);
   std::string GetGenreById(int id);
   int GetGenreByName(const std::string& strGenre);
-  bool GetGenresJSON(CFileItemList& items, bool bSources = false);
 
   /////////////////////////////////////////////////
   // Link tables
@@ -461,12 +460,18 @@ public:
   bool GetSongsByWhere(const std::string &baseDir, const Filter &filter, CFileItemList& items, const SortDescription &sortDescription = SortDescription());
   bool GetSongsFullByWhere(const std::string &baseDir, const Filter &filter, CFileItemList& items, const SortDescription &sortDescription = SortDescription(), bool artistData = false);
   bool GetAlbumsByWhere(const std::string &baseDir, const Filter &filter, CFileItemList &items, const SortDescription &sortDescription = SortDescription(), bool countOnly = false);
-  bool GetAlbumsByWhere(const std::string &baseDir, const Filter &filter, VECALBUMS& albums, int& total, const SortDescription &sortDescription = SortDescription(), bool countOnly = false);
   bool GetArtistsByWhere(const std::string& strBaseDir, const Filter &filter, CFileItemList& items, const SortDescription &sortDescription = SortDescription(), bool countOnly = false);
   bool GetRandomSong(CFileItem* item, int& idSong, const Filter &filter);
   int GetSongsCount(const Filter &filter = Filter());
   unsigned int GetSongIDs(const Filter &filter, std::vector<std::pair<int,int> > &songIDs);
   bool GetFilter(CDbUrl &musicUrl, Filter &filter, SortDescription &sorting) override;
+
+  /////////////////////////////////////////////////
+  // JSON-RPC 
+  /////////////////////////////////////////////////
+  bool GetGenresJSON(CFileItemList& items, bool bSources = false);
+  bool GetAlbumsByWhereJSON(const std::set<std::string>& fields, const std::string &baseDir,  
+    CVariant& result, int& total, const SortDescription &sortDescription = SortDescription());
 
   /////////////////////////////////////////////////
   // Scraper
@@ -646,6 +651,9 @@ private:
   void GetFileItemFromDataset(CFileItem* item, const CMusicDbUrl &baseUrl);
   void GetFileItemFromDataset(const dbiplus::sql_record* const record, CFileItem* item, const CMusicDbUrl &baseUrl);
   void GetFileItemFromArtistCredits(VECARTISTCREDITS& artistCredits, CFileItem* item);
+
+  std::string GetField(const std::string& field, const MediaType& mediaType);
+
   bool CleanupSongs(CGUIDialogProgress* progressDialog = nullptr);
   bool CleanupSongsByIds(const std::string &strSongIds);
   bool CleanupPaths();

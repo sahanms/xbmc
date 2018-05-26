@@ -30,6 +30,7 @@
 #include "music/tags/MusicInfoTag.h"
 #include "music/Artist.h"
 #include "music/Album.h"
+#include "music/MusicThumbLoader.h"
 #include "music/Song.h"
 #include "messaging/ApplicationMessenger.h"
 #include "filesystem/Directory.h"
@@ -230,32 +231,68 @@ JSONRPC_STATUS CAudioLibrary::GetAlbums(const std::string &method, ITransportLay
     return InvalidParams;
 
   int total;
-  VECALBUMS albums;
-  if (!musicdatabase.GetAlbumsByWhere(musicUrl.ToString(), CDatabase::Filter(), albums, total, sorting))
-    return InternalError;
-
-  CFileItemList items;
-  items.Reserve(albums.size());
-  for (unsigned int index = 0; index < albums.size(); index++)
+  std::set<std::string> fields;
+  if (parameterObject.isMember("properties") && parameterObject["properties"].isArray())
   {
-    CMusicDbUrl itemUrl = musicUrl;
-    std::string path = StringUtils::Format("%li/", albums[index].idAlbum);
-    itemUrl.AppendPath(path);
-
-    CFileItemPtr pItem;
-    FillAlbumItem(albums[index], itemUrl.ToString(), pItem);
-    items.Add(pItem);
+    for (CVariant::const_iterator_array field = parameterObject["properties"].begin_array(); 
+      field != parameterObject["properties"].end_array(); field++)
+      fields.insert(field->asString());
   }
 
-  //Get song genres (genreIDs and/or genre strings) and sources
-  JSONRPC_STATUS ret = GetAdditionalAlbumDetails(parameterObject, items, musicdatabase);
-  if (ret != OK)
-    return ret;
+  if (!musicdatabase.GetAlbumsByWhereJSON(fields, musicUrl.ToString(), result, total, sorting))
+    return InternalError;
 
-  int size = items.Size();
-  if (total > size)
-    size = total;
-  HandleFileItemList("albumid", false, "albums", items, parameterObject, result, size, false);
+  bool bFetchArt = fields.find("art") != fields.end();
+  bool bFetchFanart = fields.find("fanart") != fields.end();
+  if (bFetchArt || bFetchFanart)
+  {
+    CThumbLoader *thumbLoader = NULL;
+    thumbLoader = new CMusicThumbLoader();
+    if (thumbLoader != NULL)
+      thumbLoader->OnLoaderStart();
+
+    std::set<std::string> artfields;
+    if (bFetchArt)
+      artfields.insert("art");
+    if (bFetchFanart)
+      artfields.insert("fanart");
+
+    for (unsigned int index = 0; index < result["albums"].size(); index++)
+    {
+      CFileItem item;
+      item.GetMusicInfoTag()->SetDatabaseId(result["albums"][index]["albumid"].asInteger(), MediaTypeAlbum);
+
+      // Could use FillDetails, but it does unnecessary serialization of empty MusiInfoTag
+      // CFileItemPtr itemptr(new CFileItem(item));
+      // FillDetails(item.GetMusicInfoTag(), itemptr, artfields, result["albums"][index], thumbLoader);
+
+      thumbLoader->FillLibraryArt(item);
+
+      if (bFetchFanart)
+      {
+        if (item.HasArt("fanart"))
+          result["albums"][index]["fanart"] = CTextureUtils::GetWrappedImageURL(item.GetArt("fanart"));
+        else
+          result["albums"][index]["fanart"] = "";
+      }
+      if (bFetchArt)
+      {
+        CGUIListItem::ArtMap artMap = item.GetArt();
+        CVariant artObj(CVariant::VariantTypeObject);
+        for (CGUIListItem::ArtMap::const_iterator artIt = artMap.begin(); artIt != artMap.end(); ++artIt)
+        {
+          if (!artIt->second.empty())
+            artObj[artIt->first] = CTextureUtils::GetWrappedImageURL(artIt->second);
+        }
+        result["albums"][index]["art"] = artObj;
+      }
+    }
+
+    delete thumbLoader;
+  }
+
+  int start, end;
+  HandleLimits(parameterObject, result, total, start, end);
 
   return OK;
 }
