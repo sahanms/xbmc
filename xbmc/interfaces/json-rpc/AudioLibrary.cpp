@@ -381,33 +381,80 @@ JSONRPC_STATUS CAudioLibrary::GetSongs(const std::string &method, ITransportLaye
   if (!ParseSorting(parameterObject, sorting.sortBy, sorting.sortOrder, sorting.sortAttributes))
     return InvalidParams;
 
-  // Check if any properties from songartistview wanted, only then query artist data for songs
-  // "displayArtist" is held in songview
-  std::set<std::string> checkProperties;
-  checkProperties.insert("artist");
-  checkProperties.insert("artistid");
-  checkProperties.insert("musicbrainzartistid");
-  checkProperties.insert("contributors");
-  checkProperties.insert("displaycomposer");
-  checkProperties.insert("displayconductor");
-  checkProperties.insert("displayorchestra");
-  checkProperties.insert("displaylyricist");
-  std::set<std::string> additionalProperties;
-  bool artistData = CheckForAdditionalProperties(parameterObject["properties"], checkProperties, additionalProperties);
+  int total;
+  std::set<std::string> fields;
+  if (parameterObject.isMember("properties") && parameterObject["properties"].isArray())
+  {
+    for (CVariant::const_iterator_array field = parameterObject["properties"].begin_array();
+      field != parameterObject["properties"].end_array(); field++)
+      fields.insert(field->asString());
+  }
 
-  CFileItemList items;
-  if (!musicdatabase.GetSongsFullByWhere(musicUrl.ToString(), CDatabase::Filter(), items, sorting, artistData))
+  if (!musicdatabase.GetSongsByWhereJSON(fields, musicUrl.ToString(), result, total, sorting))
     return InternalError;
 
-  JSONRPC_STATUS ret = GetAdditionalSongDetails(parameterObject, items, musicdatabase);
-  if (ret != OK)
-    return ret;
+  bool bFetchArt = fields.find("art") != fields.end();
+  bool bFetchFanart = fields.find("fanart") != fields.end();
+  bool bFetchThumb = fields.find("thumbnail") != fields.end();
+  if (bFetchArt || bFetchFanart || bFetchThumb)
+  {
+    CThumbLoader *thumbLoader = NULL;
+    thumbLoader = new CMusicThumbLoader();
+    if (thumbLoader != NULL)
+      thumbLoader->OnLoaderStart();
 
-  int size = items.Size();
-  if (items.HasProperty("total") && items.GetProperty("total").asInteger() > size)
-    size = (int)items.GetProperty("total").asInteger();
-  HandleFileItemList("songid", true, "songs", items, parameterObject, result, size, false);
+    std::set<std::string> artfields;
+    if (bFetchArt)
+      artfields.insert("art");
+    if (bFetchFanart)
+      artfields.insert("fanart");
+    if (bFetchThumb)
+      artfields.insert("thumbnail");
 
+    for (unsigned int index = 0; index < result["songs"].size(); index++)
+    {
+      CFileItem item;
+      item.GetMusicInfoTag()->SetDatabaseId(result["songs"][index]["songid"].asInteger(), MediaTypeSong);
+
+      // Could use FillDetails, but it does unnecessary serialization of empty MusiInfoTag
+      // CFileItemPtr itemptr(new CFileItem(item));
+      // FillDetails(item.GetMusicInfoTag(), itemptr, artfields, result["songs"][index], thumbLoader);
+
+      thumbLoader->FillLibraryArt(item);
+
+      if (bFetchThumb)
+      {
+        if (item.HasArt("thumbnail"))
+          result["songs"][index]["thumbnail"] = CTextureUtils::GetWrappedImageURL(item.GetArt("thumb"));
+        else
+          result["songs"][index]["thumbnail"] = "";
+      }
+      if (bFetchFanart)
+      {
+        if (item.HasArt("fanart"))
+          result["songs"][index]["fanart"] = CTextureUtils::GetWrappedImageURL(item.GetArt("fanart"));
+        else
+          result["songs"][index]["fanart"] = "";
+      }
+      if (bFetchArt)
+      {
+        CGUIListItem::ArtMap artMap = item.GetArt();
+        CVariant artObj(CVariant::VariantTypeObject);
+        for (CGUIListItem::ArtMap::const_iterator artIt = artMap.begin(); artIt != artMap.end(); ++artIt)
+        {
+          if (!artIt->second.empty())
+            artObj[artIt->first] = CTextureUtils::GetWrappedImageURL(artIt->second);
+        }
+        result["songs"][index]["art"] = artObj;
+      }
+    }
+
+    delete thumbLoader;
+  }
+
+  int start, end;
+  HandleLimits(parameterObject, result, total, start, end);
+  
   return OK;
 }
 

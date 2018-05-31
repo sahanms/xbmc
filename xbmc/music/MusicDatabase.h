@@ -472,6 +472,8 @@ public:
   bool GetGenresJSON(CFileItemList& items, bool bSources = false);
   bool GetAlbumsByWhereJSON(const std::set<std::string>& fields, const std::string &baseDir,  
     CVariant& result, int& total, const SortDescription &sortDescription = SortDescription());
+  bool GetSongsByWhereJSON(const std::set<std::string>& fields, const std::string &baseDir,
+    CVariant& result, int& total, const SortDescription &sortDescription = SortDescription());
 
   /////////////////////////////////////////////////
   // Scraper
@@ -651,9 +653,7 @@ private:
   void GetFileItemFromDataset(CFileItem* item, const CMusicDbUrl &baseUrl);
   void GetFileItemFromDataset(const dbiplus::sql_record* const record, CFileItem* item, const CMusicDbUrl &baseUrl);
   void GetFileItemFromArtistCredits(VECARTISTCREDITS& artistCredits, CFileItem* item);
-
-  std::string GetField(const std::string& field, const MediaType& mediaType);
-
+    
   bool CleanupSongs(CGUIDialogProgress* progressDialog = nullptr);
   bool CleanupSongsByIds(const std::string &strSongIds);
   bool CleanupPaths();
@@ -792,5 +792,25 @@ private:
     artist_dtDateAdded,
     artist_enumCount // end of the enum, do not add past here
   } ArtistFields;
+
+  // Fields fetched by GetSongsByWhereJSON,  order same as in JSONtoDBSong
+  static enum _JoinToSongFields
+  {
+    // Used by GetSongsByWhereJSON 
+    joinToSongs_idAlbumArtist = 0,
+    joinToSongs_strAlbumArtist,
+    joinToSongs_strAlbumArtistMBID,
+    joinToSongs_iOrderAlbumArtist,
+    joinToSongs_idArtist,
+    joinToSongs_strArtist,
+    joinToSongs_strArtistMBID,
+    joinToSongs_iOrderArtist,
+    joinToSongs_idRole,
+    joinToSongs_strRole,
+    joinToSongs_iOrderRole,
+    joinToSongs_idGenre,
+    joinToSongs_iOrderGenre,
+    joinToSongs_enumCount // end of the enum, do not add past here
+  } JoinToSongFields;
 
 };
