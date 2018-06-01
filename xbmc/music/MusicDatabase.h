@@ -793,6 +793,18 @@ private:
     artist_enumCount // end of the enum, do not add past here
   } ArtistFields;
 
+  // Fields fetched by GetAlbumsByWhereJSON,  order same as in JSONtoDBAlbum
+  static enum _JoinToAlbumFields
+  {
+    joinToAlbum_idArtist = 0,
+    joinToAlbum_strArtist,
+    joinToAlbum_strArtistMBID,
+    joinToAlbum_idSongGenre,
+    joinToAlbum_strSongGenre,
+    joinToAlbum_enumCount // end of the enum, do not add past here
+  } JoinToAlbumFields;
+
+
   // Fields fetched by GetSongsByWhereJSON,  order same as in JSONtoDBSong
   static enum _JoinToSongFields
   {
