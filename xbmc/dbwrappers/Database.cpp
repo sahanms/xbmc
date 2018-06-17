@@ -150,6 +150,89 @@ bool CDatabase::ExistsSubQuery::BuildSQL(std::string & strSQL)
   return true;
 }
 
+CDatabase::DatasetLayout::DatasetLayout(size_t totalfields)
+{
+  for (size_t i = 0; i < totalfields; i++)
+  {
+    DatasetFieldInfo field(false, false, -1);
+    fields.emplace_back(field);
+  }
+}
+
+void CDatabase::DatasetLayout::SetField(int fieldNo, const std::string &strField, bool bOutput /*= false*/)
+{  
+  if (strField.empty())
+    return;
+
+  if (fieldNo >= 0 && fieldNo < fields.size())
+  {
+    fields[fieldNo].strField = strField;
+    fields[fieldNo].fetch = true;
+    fields[fieldNo].output = bOutput;
+  }
+}
+
+void CDatabase::DatasetLayout::AdjustRecordNumbers(int offset)
+{
+  int recno = 0;
+  for (auto& field : fields)
+  {
+    if (field.fetch)
+    {
+      field.recno = recno + offset;
+      ++recno;
+    }
+  }
+}
+
+bool CDatabase::DatasetLayout::GetFetch(int fieldno)
+{
+  if (fieldno >= 0 && fieldno < fields.size())
+    return fields[fieldno].fetch;
+  return false;
+}
+
+bool CDatabase::DatasetLayout::GetOutput(int fieldno)
+{
+  if (fieldno >= 0 && fieldno < fields.size())
+    return fields[fieldno].output;
+  return false;
+}
+
+int CDatabase::DatasetLayout::GetRecNo(int fieldno)
+{
+  if (fieldno >= 0 && fieldno < fields.size())
+    return fields[fieldno].recno;
+  return -1;
+}
+
+const std::string CDatabase::DatasetLayout::GetFields()
+{
+  std::string strSQL;
+  for (auto field : fields)
+  {
+    if (!field.strField.empty() && field.fetch)
+    {
+      if (strSQL.empty())
+        strSQL = field.strField;
+      else
+        strSQL += ", " + field.strField;
+    }
+  }
+
+  return strSQL;
+}
+
+bool CDatabase::DatasetLayout::HasFilterFields()
+{
+  for (auto field : fields)
+  {
+    if (field.fetch)
+      return true;
+  }
+  return false;
+}
+
 CDatabase::CDatabase() :
   m_profileManager(CServiceBroker::GetProfileManager())
 {

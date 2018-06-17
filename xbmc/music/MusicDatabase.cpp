@@ -4877,6 +4877,9 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
       extFilter.AppendOrder("iUserrating" + DESC);
       extFilter.AppendOrder("strAlbum");
     }
+    else
+      extFilter.AppendOrder("album.idAlbum");
+
     
     std::string strSQL;
 
@@ -4890,19 +4893,9 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
         index_idArtist = i;
         break;
       }
-    }
-    std::vector<bool> joinfieldoutput;
-    std::vector<bool> joinfieldfetch;
-    std::vector<int> joinfieldrecno;
-    for (size_t i = 0; i < joinToAlbum_enumCount; i++)
-    {
-      joinfieldoutput.emplace_back(false);
-      joinfieldfetch.emplace_back(false);
-      joinfieldrecno.emplace_back(-1);
-    }
-
+    }   
     Filter joinFilter;
-    int joinFieldCounter = 0;
+    DatasetLayout joinLayout(static_cast<size_t>(joinToAlbum_enumCount));
     extFilter.AppendField("album.idAlbum");  // ID "albumid" in JSON
     extFilter.AppendField("strAlbum");  // label in JSON
     std::vector<int> dbfieldindex;
@@ -4913,15 +4906,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
       {
         if (JSONtoDBAlbum[i].bJoined)
         {  // Field from join
-          joinFilter.AppendField(JSONtoDBAlbum[i].SQL);
-          int ji = i - index_idArtist;
-          if (ji >= 0 && ji < joinToAlbum_enumCount)
-          {
-            joinfieldoutput[ji] = true;
-            joinfieldfetch[ji] = true;
-            joinfieldrecno[ji] = joinFieldCounter;
-            ++joinFieldCounter;
-          }
+          joinLayout.SetField(i - index_idArtist, JSONtoDBAlbum[i].SQL, true);
         }
         else
         {
@@ -4986,9 +4971,9 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
     joinFilter.AppendOrder(order);
     joinFilter.AppendGroup("a1.idAlbum");
     // Album artists
-    if (joinfieldfetch[joinToAlbum_idArtist] ||
-        joinfieldfetch[joinToAlbum_strArtist] ||
-        joinfieldfetch[joinToAlbum_strArtistMBID])
+    if (joinLayout.GetFetch(joinToAlbum_idArtist) ||
+        joinLayout.GetFetch(joinToAlbum_strArtist) ||
+        joinLayout.GetFetch(joinToAlbum_strArtistMBID))
     {  // album_artist (has artist name as well)
        // All albums have at least one artist so inner join sufficient
       bJoinAlbumArtist = true;
@@ -4996,48 +4981,37 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
       joinFilter.AppendGroup("album_artist.idArtist");
       joinFilter.AppendOrder("album_artist.iOrder");
       // Ensure idArtist is queried 
-      if (!joinfieldfetch[joinToAlbum_idArtist])
+      if (!joinLayout.GetFetch(joinToAlbum_idArtist))
       {
-        joinFilter.AppendField(JSONtoDBAlbum[index_idArtist + joinToAlbum_idArtist].SQL);
-        joinfieldfetch[joinToAlbum_idArtist] = true;
-        joinfieldrecno[joinToAlbum_idArtist] = joinFieldCounter;
-        ++joinFieldCounter;       
+        joinLayout.SetField(joinToAlbum_idArtist, JSONtoDBAlbum[index_idArtist + joinToAlbum_idArtist].SQL);
       }
     }
     // artist only needed for MBID
-    if (joinfieldfetch[joinToAlbum_strArtistMBID])
+    if (joinLayout.GetFetch(joinToAlbum_strArtistMBID))
       joinFilter.AppendJoin("JOIN artist ON artist.idArtist = album_artist.idArtist");
 
     // Songgenres - id and genres always both
-    if (joinfieldfetch[joinToAlbum_idSongGenre])
+    if (joinLayout.GetFetch(joinToAlbum_idSongGenre))
     { // All albums have songs, but left join genre as songs may not have genre
       joinFilter.AppendJoin("JOIN song ON song.idAlbum = a1.idAlbum");
       joinFilter.AppendJoin("LEFT JOIN song_genre ON song.idSong = song_genre.idSong");
       joinFilter.AppendJoin("LEFT JOIN genre ON song_genre.idGenre = genre.idGenre");
       joinFilter.AppendGroup("genre.idGenre");
       joinFilter.AppendOrder("song_genre.iOrder");
-      joinFilter.AppendField(JSONtoDBAlbum[index_idArtist + joinToAlbum_strSongGenre].SQL);
-      joinfieldfetch[joinToAlbum_strSongGenre] = true;
-      joinfieldrecno[joinToAlbum_strSongGenre] = joinFieldCounter;
-      ++joinFieldCounter;
-
+      joinLayout.SetField(joinToAlbum_strSongGenre, JSONtoDBAlbum[index_idArtist + joinToAlbum_strSongGenre].SQL);
     }
 
     // Build JOIN part of query (if we have one)
     std::string strSQLJoin;
-    if (joinFieldCounter > 0)
+    if (joinLayout.HasFilterFields())
       if (!BuildSQL(strSQLJoin, joinFilter, strSQLJoin))
         return false;
         
     // Adjust where in the results record the join fields are allowing for the
     // inline view fields (Quicker than finding field by name every time)
-    int joinoffsset = 2 + dbfieldindex.size(); // idAlbum, strTitle, + optional album fields    
-    for (size_t i = 0; i < joinToAlbum_enumCount; i++)
-    {
-      if (joinfieldrecno[i] > -1)
-        joinfieldrecno[i] = joinfieldrecno[i] + joinoffsset;
-    }
-
+    // idAlbum, strTitle, + optional album fields    
+    joinLayout.AdjustRecordNumbers(2 + dbfieldindex.size());
+    
     // Build full query
     // When have multiple value joins (artists or song genres) use inline view
     // SELECT a1.*, <join fields> FROM 
@@ -5046,10 +5020,10 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
     // Don't use prepareSQL - confuses  releasetype = 'album' filter and group_concat separator
 
     strSQL = "SELECT " + extFilter.fields + " FROM album " + strSQLExtra;
-    if (joinFieldCounter > 0)
+    if (joinLayout.HasFilterFields())
     {
       strSQL = "(" + strSQL + ") AS a1 ";
-      strSQL = "SELECT a1.*, " + joinFilter.fields + " FROM " + strSQL + strSQLJoin;
+      strSQL = "SELECT a1.*, " + joinLayout.GetFields() + " FROM " + strSQL + strSQLJoin;
     }
         
     CLog::Log(LOGDEBUG, "%s query: %s", __FUNCTION__, strSQL.c_str());
@@ -5086,7 +5060,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
         if (!albumObj.empty())
         {
           // Ensure albums with null songgenres get empty array
-          if (joinfieldoutput[joinToAlbum_idSongGenre] && !albumObj.isMember("songgenres"))
+          if (joinLayout.GetOutput(joinToAlbum_idSongGenre) && !albumObj.isMember("songgenres"))
             albumObj["songgenres"] = CVariant(CVariant::VariantTypeArray);
 
           // Split sources string into int array
@@ -5131,24 +5105,24 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
       //! @todo: what about "texture" from join?
       if (bJoinAlbumArtist)
       {
-        if (artistId != record->at(joinfieldrecno[joinToAlbum_idArtist]).get_asInt())
+        if (artistId != record->at(joinLayout.GetRecNo(joinToAlbum_idArtist)).get_asInt())
         {
           bSongGenreDone = (artistId > 0);  // Not first artist, skip genre
-          artistId = record->at(joinfieldrecno[joinToAlbum_idArtist]).get_asInt();
-          if (joinfieldoutput[joinToAlbum_idArtist])
+          artistId = record->at(joinLayout.GetRecNo(joinToAlbum_idArtist)).get_asInt();
+          if (joinLayout.GetOutput(joinToAlbum_idArtist))
             albumObj["artistid"].append(artistId);
-          if (joinfieldoutput[joinToAlbum_strArtist])
-            albumObj["artist"].append(record->at(joinfieldrecno[joinToAlbum_strArtist]).get_asString());
-          if (joinfieldoutput[joinToAlbum_strArtistMBID])
-            albumObj["musicbrainzartistid"].append(record->at(joinfieldrecno[joinToAlbum_strArtistMBID]).get_asString());
+          if (joinLayout.GetOutput(joinToAlbum_strArtist))
+            albumObj["artist"].append(record->at(joinLayout.GetRecNo(joinToAlbum_strArtist)).get_asString());
+          if (joinLayout.GetOutput(joinToAlbum_strArtistMBID))
+            albumObj["musicbrainzartistid"].append(record->at(joinLayout.GetRecNo(joinToAlbum_strArtistMBID)).get_asString());
         }        
       }
-      if (!bSongGenreDone && joinfieldrecno[joinToAlbum_idSongGenre] > -1 &&
-          !record->at(joinfieldrecno[joinToAlbum_idSongGenre]).get_isNull())
+      if (!bSongGenreDone && joinLayout.GetRecNo(joinToAlbum_idSongGenre) > -1 &&
+          !record->at(joinLayout.GetRecNo(joinToAlbum_idSongGenre)).get_isNull())
       {
         CVariant genreObj;
-        genreObj["genreid"] = record->at(joinfieldrecno[joinToAlbum_idSongGenre]).get_asInt();
-        genreObj["title"] = record->at(joinfieldrecno[joinToAlbum_strSongGenre]).get_asString();      
+        genreObj["genreid"] = record->at(joinLayout.GetRecNo(joinToAlbum_idSongGenre)).get_asInt();
+        genreObj["title"] = record->at(joinLayout.GetRecNo(joinToAlbum_strSongGenre)).get_asString();
         albumObj["songgenres"].append(genreObj);
       }
       m_pDS->next();
@@ -5219,7 +5193,7 @@ static const translateJSONField JSONtoDBSong[] = {
   Song "thumbnail", "fanart" and "art" fields of JSON schema are fetched using
   thumbloader and separate queries to allow for fallback strategy
   "lyrics"?? Can be set for an item (by addons) but not held in db so
-  AudioLibrary.GetSongs() never fillS this field despite being in schema
+  AudioLibrary.GetSongs() never fills this field despite being in schema
 
    FROM ( SELECT * FROM song 
      JOIN album ON album.idAlbum = song.idAlbum
@@ -5326,6 +5300,8 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
       extFilter.AppendOrder("userrating" + DESC);
       extFilter.AppendOrder("strTitle");
     }
+    else
+      extFilter.AppendOrder("song.idSong");
 
     std::string strSQL;
 
@@ -5339,19 +5315,9 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
         index_idAlbumArtist = i;
         break;
       }
-    }
-    std::vector<bool> joinfieldoutput;
-    std::vector<bool> joinfieldfetch;
-    std::vector<int> joinfieldrecno;
-    for (size_t i = 0; i < joinToSongs_enumCount; i++)
-    {
-      joinfieldoutput.emplace_back(false);
-      joinfieldfetch.emplace_back(false);
-      joinfieldrecno.emplace_back(-1);
-    }
-    
+    }    
     Filter joinFilter;
-    int joinFieldCounter = 0;
+    DatasetLayout joinLayout(static_cast<size_t>(joinToSongs_enumCount));
     extFilter.AppendField("song.idSong");  // ID "songid" in JSON
     extFilter.AppendField("strTitle");  // label in JSON
     std::vector<int> dbfieldindex;
@@ -5366,15 +5332,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
         {  // Field from join
           if (!StringUtils::StartsWith(JSONtoDBSong[i].fieldDB, "Role_"))
           {
-            joinFilter.AppendField(JSONtoDBSong[i].SQL);
-            int ji = i - index_idAlbumArtist;
-            if (ji >= 0 && ji < joinToSongs_enumCount)
-            {
-              joinfieldoutput[ji] = true;
-              joinfieldfetch[ji] = true;
-              joinfieldrecno[ji] = joinFieldCounter;
-              ++joinFieldCounter;
-            }
+            joinLayout.SetField(i - index_idAlbumArtist, JSONtoDBSong[i].SQL, true);
           }
           else
           { // "contributors", "displaycomposer" etc.
@@ -5460,9 +5418,9 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     joinFilter.AppendGroup("sv.idSong");
     
     // Album artists
-    if (joinfieldfetch[joinToSongs_idAlbumArtist] ||
-        joinfieldfetch[joinToSongs_strAlbumArtist] ||
-        joinfieldfetch[joinToSongs_strAlbumArtistMBID] )
+    if (joinLayout.GetFetch(joinToSongs_idAlbumArtist) ||
+        joinLayout.GetFetch(joinToSongs_strAlbumArtist) ||
+        joinLayout.GetFetch(joinToSongs_strAlbumArtistMBID))
     {  // album_artist (has artist name as well)
        // All songs have at least one album artist so inner join sufficient
       bJoinAlbumArtist = true;
@@ -5470,12 +5428,10 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
       joinFilter.AppendGroup("album_artist.idArtist");
       joinFilter.AppendOrder("album_artist.iOrder");
       // Ensure idAlbumArtist is queried for processing repeats
-      if (!joinfieldfetch[joinToSongs_idAlbumArtist])
+      if (!joinLayout.GetFetch(joinToSongs_idAlbumArtist))
       {
-        joinFilter.AppendField(JSONtoDBSong[index_idAlbumArtist + joinToSongs_idAlbumArtist].SQL);
-        joinfieldfetch[joinToSongs_idAlbumArtist] = true;
-        joinfieldrecno[joinToSongs_idAlbumArtist] = joinFieldCounter;
-        ++joinFieldCounter;
+        joinLayout.SetField(joinToSongs_idAlbumArtist, 
+          JSONtoDBSong[index_idAlbumArtist + joinToSongs_idAlbumArtist].SQL);
       }      
       // Ensure song.IdAlbum is field of the inline view for join
       if (fields.find("albumid") == fields.end())
@@ -5483,8 +5439,8 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
         extFilter.AppendField("song.idAlbum"); //Prefer lookup JSONtoDBSong[XXX].dbField);
         dbfieldindex.emplace_back(-1);
       }
-      // artist only needed for MBID
-      if (joinfieldfetch[joinToSongs_strAlbumArtistMBID])
+      // artist join only needed for MBID
+      if (joinLayout.GetFetch(joinToSongs_strAlbumArtistMBID))
         joinFilter.AppendJoin("JOIN artist AS albumartist ON albumartist.idArtist = album_artist.idArtist");
     }
 
@@ -5493,9 +5449,9 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
      JSON schema "artist", "artistid", "musicbrainzartistid", "contributors",
      "displaycomposer", "displayconductor", "displayorchestra", "displaylyricist",
     */
-    if (joinfieldfetch[joinToSongs_idArtist] ||
-        joinfieldfetch[joinToSongs_strArtist] ||
-        joinfieldfetch[joinToSongs_strArtistMBID] ||
+    if (joinLayout.GetFetch(joinToSongs_idArtist) ||
+        joinLayout.GetFetch(joinToSongs_strArtist) ||
+        joinLayout.GetFetch(joinToSongs_strArtistMBID) ||
         !rolefieldlist.empty())
     { // song_artist (has artist name as well)
       // All songs have at least one artist (idRole = 1) so inner join sufficient
@@ -5509,29 +5465,22 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
       else 
       {
         // Ensure idRole is queried
-        if (!joinfieldfetch[joinToSongs_idRole])
+        if (!joinLayout.GetFetch(joinToSongs_idRole))
         {
-          joinFilter.AppendField(JSONtoDBSong[index_idAlbumArtist + joinToSongs_idRole].SQL);
-          joinfieldfetch[joinToSongs_idRole] = true;
-          joinfieldrecno[joinToSongs_idRole] = joinFieldCounter;
-          ++joinFieldCounter;
+          joinLayout.SetField(joinToSongs_idRole,
+            JSONtoDBSong[index_idAlbumArtist + joinToSongs_idRole].SQL);
         }
         // Ensure strArtist is queried
-        if (!joinfieldfetch[joinToSongs_strArtist])
+        if (!joinLayout.GetFetch(joinToSongs_strArtist))
         {
-          joinFilter.AppendField(JSONtoDBSong[index_idAlbumArtist + joinToSongs_strArtist].SQL);
-          joinfieldfetch[joinToSongs_strArtist] = true;
-          joinfieldrecno[joinToSongs_strArtist] = joinFieldCounter;
-          ++joinFieldCounter;
+          joinLayout.SetField(joinToSongs_strArtist,
+            JSONtoDBSong[index_idAlbumArtist + joinToSongs_strArtist].SQL);
         }
         if (fields.find("contributors") != fields.end())
         { // all roles
           bJoinRole = true;
           // Ensure strRole is queried from role table
-          joinFilter.AppendField("role.strRole");
-          joinfieldfetch[joinToSongs_strRole] = true;
-          joinfieldrecno[joinToSongs_strRole] = joinFieldCounter;
-          ++joinFieldCounter;
+          joinLayout.SetField(joinToSongs_strRole, "role.strRole");
           joinFilter.AppendJoin("JOIN song_artist ON song_artist.idSong = sv.idSong");
           joinFilter.AppendJoin("JOIN role ON song_artist.idRole = role.idRole");
           joinFilter.AppendGroup("song_artist.idArtist, song_artist.idRole");
@@ -5558,20 +5507,18 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
         }
       }
       // Ensure idArtist is queried for processing repeats
-      if (!joinfieldfetch[joinToSongs_idArtist])
+      if (!joinLayout.GetFetch(joinToSongs_idArtist))
       {
-        joinFilter.AppendField(JSONtoDBSong[index_idAlbumArtist + joinToSongs_idArtist].SQL);
-        joinfieldfetch[joinToSongs_idArtist] = true;
-        joinfieldrecno[joinToSongs_idArtist] = joinFieldCounter;
-        ++joinFieldCounter;
+        joinLayout.SetField(joinToSongs_idArtist,
+          JSONtoDBSong[index_idAlbumArtist + joinToSongs_idArtist].SQL);
       }
       // artist only needed for MBID
-      if (joinfieldfetch[joinToSongs_strArtistMBID])     
+      if (joinLayout.GetFetch(joinToSongs_strArtistMBID))
         joinFilter.AppendJoin("JOIN artist AS songartist ON songartist.idArtist = song_artist.idArtist");
     }    
 
     // Genre ids
-    if (joinfieldrecno[joinToSongs_idGenre] > -1)
+    if (joinLayout.GetRecNo(joinToSongs_idGenre) > -1)
     { // song genre ids (strGenre demormalised in song table)
       // Left join as songs may not have genre      
       joinFilter.AppendJoin("LEFT JOIN song_genre ON song_genre.idSong = sv.idSong");
@@ -5581,18 +5528,14 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
 
     // Build JOIN part of query (if we have one)
     std::string strSQLJoin;
-    if (joinFieldCounter > 0)
+    if (joinLayout.HasFilterFields())
       if (!BuildSQL(strSQLJoin, joinFilter, strSQLJoin))
         return false;
 
     // Adjust where in the results record the join fields are allowing for the
     // inline view fields (Quicker than finding field by name every time)
-    int joinoffsset = 2 + dbfieldindex.size(); // idSong, strTitle, + optional song fields    
-    for (size_t i = 0; i < joinToSongs_enumCount; i++)
-    {
-      if (joinfieldrecno[i] > -1)
-        joinfieldrecno[i] = joinfieldrecno[i] + joinoffsset;
-    }
+    // idSong, strTitle, + optional song fields
+    joinLayout.AdjustRecordNumbers(2 + dbfieldindex.size());
 
     // Build full query
     // When have multiple value joins use inline view
@@ -5602,10 +5545,10 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     //   <order by> + <joins order by>
     // Don't use prepareSQL - confuses  releasetype = 'album' filter and group_concat separator
     strSQL = "SELECT " + extFilter.fields + " FROM song " + strSQLExtra;
-    if (joinFieldCounter > 0)
+    if (joinLayout.HasFilterFields())
     {
       strSQL = "("+ strSQL + ") AS sv ";
-      strSQL = "SELECT sv.*, " + joinFilter.fields + " FROM " + strSQL + strSQLJoin;
+      strSQL = "SELECT sv.*, " + joinLayout.GetFields() + " FROM " + strSQL + strSQLJoin;
     }
     
     CLog::Log(LOGDEBUG, "%s query: %s", __FUNCTION__, strSQL.c_str());
@@ -5670,7 +5613,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
               songObj[displayXXX] = "";
           }
           // Ensure songs with null genreid gets empty array
-          if (joinfieldoutput[joinToSongs_idGenre] && !songObj.isMember("genreid"))
+          if (joinLayout.GetOutput(joinToSongs_idGenre) && !songObj.isMember("genreid"))
             songObj["genreid"] = CVariant(CVariant::VariantTypeArray);
 
           result["songs"].append(songObj);
@@ -5718,50 +5661,50 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
 
       if (bJoinAlbumArtist)
       {
-        if (albumartistId != record->at(joinfieldrecno[joinToSongs_idAlbumArtist]).get_asInt())
+        if (albumartistId != record->at(joinLayout.GetRecNo(joinToSongs_idAlbumArtist)).get_asInt())
         {
           bSongGenreDone = bSongGenreDone || (albumartistId > 0);  // Not first album artist, skip genre
           bSongArtistDone = bSongArtistDone || (albumartistId > 0);  // Not first album artist, skip song artists
-          albumartistId = record->at(joinfieldrecno[joinToSongs_idAlbumArtist]).get_asInt();
-          if (joinfieldoutput[joinToSongs_idAlbumArtist])
+          albumartistId = record->at(joinLayout.GetRecNo(joinToSongs_idAlbumArtist)).get_asInt();
+          if (joinLayout.GetOutput(joinToSongs_idAlbumArtist))
             songObj["albumartistid"].append(albumartistId);
-          if (joinfieldoutput[joinToSongs_strAlbumArtist])
-            songObj["albumartist"].append(record->at(joinfieldrecno[joinToSongs_strAlbumArtist]).get_asString());           
-          if (joinfieldoutput[joinToSongs_strAlbumArtistMBID])
-            songObj["musicbrainzalbumartistid"].append(record->at(joinfieldrecno[joinToSongs_strAlbumArtistMBID]).get_asString());
+          if (joinLayout.GetOutput(joinToSongs_strAlbumArtist))
+            songObj["albumartist"].append(record->at(joinLayout.GetRecNo(joinToSongs_strAlbumArtist)).get_asString());
+          if (joinLayout.GetOutput(joinToSongs_strAlbumArtistMBID))
+            songObj["musicbrainzalbumartistid"].append(record->at(joinLayout.GetRecNo(joinToSongs_strAlbumArtistMBID)).get_asString());
         }
       }
       if (bJoinSongArtist && !bSongArtistDone)
       {
-        if (artistId != record->at(joinfieldrecno[joinToSongs_idArtist]).get_asInt())
+        if (artistId != record->at(joinLayout.GetRecNo(joinToSongs_idArtist)).get_asInt())
         {
           bSongGenreDone = bSongGenreDone || (artistId > 0);  // Not first artist, skip genre
-          artistId = record->at(joinfieldrecno[joinToSongs_idArtist]).get_asInt();
-          if (joinfieldrecno[joinToSongs_idRole] < 0 ||
-              record->at(joinfieldrecno[joinToSongs_idRole]).get_asInt() == 1)
+          artistId = record->at(joinLayout.GetRecNo(joinToSongs_idArtist)).get_asInt();
+          if (joinLayout.GetRecNo(joinToSongs_idRole) < 0 ||
+              record->at(joinLayout.GetRecNo(joinToSongs_idRole)).get_asInt() == 1)
           {
-            if (joinfieldoutput[joinToSongs_idArtist])
+            if (joinLayout.GetOutput(joinToSongs_idArtist))
               songObj["artistid"].append(artistId);
-            if (joinfieldoutput[joinToSongs_strArtist])
-              songObj["artist"].append(record->at(joinfieldrecno[joinToSongs_strArtist]).get_asString());
-            if (joinfieldoutput[joinToSongs_strArtistMBID])
-              songObj["musicbrainzartistid"].append(record->at(joinfieldrecno[joinToSongs_strArtistMBID]).get_asString());
+            if (joinLayout.GetOutput(joinToSongs_strArtist))
+              songObj["artist"].append(record->at(joinLayout.GetRecNo(joinToSongs_strArtist)).get_asString());
+            if (joinLayout.GetOutput(joinToSongs_strArtistMBID))
+              songObj["musicbrainzartistid"].append(record->at(joinLayout.GetRecNo(joinToSongs_strArtistMBID)).get_asString());
           }
         }
-        if (joinfieldrecno[joinToSongs_idRole] > 0 &&
-            roleId != record->at(joinfieldrecno[joinToSongs_idRole]).get_asInt())
+        if (joinLayout.GetRecNo(joinToSongs_idRole) > 0 &&
+            roleId != record->at(joinLayout.GetRecNo(joinToSongs_idRole)).get_asInt())
         {
           bSongGenreDone = bSongGenreDone || (roleId > 0);  // Not first role, skip genre
-          roleId = record->at(joinfieldrecno[joinToSongs_idRole]).get_asInt();
+          roleId = record->at(joinLayout.GetRecNo(joinToSongs_idRole)).get_asInt();
           if (roleId > 1)
           {
             if (bJoinRole)
             {  //Contributors
                CVariant contributor;
-               contributor["name"] = record->at(joinfieldrecno[joinToSongs_strArtist]).get_asString();
-               contributor["role"] = record->at(joinfieldrecno[joinToSongs_strRole]).get_asString();
+               contributor["name"] = record->at(joinLayout.GetRecNo(joinToSongs_strArtist)).get_asString();
+               contributor["role"] = record->at(joinLayout.GetRecNo(joinToSongs_strRole)).get_asString();
                contributor["roleid"] = roleId;
-               contributor["artistid"] = record->at(joinfieldrecno[joinToSongs_idArtist]).get_asInt();
+               contributor["artistid"] = record->at(joinLayout.GetRecNo(joinToSongs_idArtist)).get_asInt();
                songObj["contributors"].append(contributor);               
             }
             // "displaycomposer", "displayconductor" etc.
@@ -5769,17 +5712,17 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
             {
               if (roleidlist[i] == roleId)
               {
-                songObj[rolefieldlist[i]].append(record->at(joinfieldrecno[joinToSongs_strArtist]).get_asString());
+                songObj[rolefieldlist[i]].append(record->at(joinLayout.GetRecNo(joinToSongs_strArtist)).get_asString());
                 continue;
               }
             }
           }
         }
       }
-      if (!bSongGenreDone && joinfieldrecno[joinToSongs_idGenre] > -1 && 
-          !record->at(joinfieldrecno[joinToSongs_idGenre]).get_isNull())
+      if (!bSongGenreDone && joinLayout.GetRecNo(joinToSongs_idGenre) > -1 &&
+          !record->at(joinLayout.GetRecNo(joinToSongs_idGenre)).get_isNull())
       {
-        songObj["genreid"].append(record->at(joinfieldrecno[joinToSongs_idGenre]).get_asInt());
+        songObj["genreid"].append(record->at(joinLayout.GetRecNo(joinToSongs_idGenre)).get_asInt());
       }
       m_pDS->next();
     }
