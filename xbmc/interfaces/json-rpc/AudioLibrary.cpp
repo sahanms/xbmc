@@ -413,8 +413,9 @@ JSONRPC_STATUS CAudioLibrary::GetSongs(const std::string &method, ITransportLaye
 
     for (unsigned int index = 0; index < result["songs"].size(); index++)
     {
-      CFileItem item;
+      CFileItem item; // Only needs song and album id set to get art
       item.GetMusicInfoTag()->SetDatabaseId(result["songs"][index]["songid"].asInteger(), MediaTypeSong);
+      item.GetMusicInfoTag()->SetAlbumId(result["songs"][index]["albumid"].asInteger());
 
       // Could use FillDetails, but it does unnecessary serialization of empty MusiInfoTag
       // CFileItemPtr itemptr(new CFileItem(item));
@@ -424,7 +425,7 @@ JSONRPC_STATUS CAudioLibrary::GetSongs(const std::string &method, ITransportLaye
 
       if (bFetchThumb)
       {
-        if (item.HasArt("thumbnail"))
+        if (item.HasArt("thumb"))
           result["songs"][index]["thumbnail"] = CTextureUtils::GetWrappedImageURL(item.GetArt("thumb"));
         else
           result["songs"][index]["thumbnail"] = "";
