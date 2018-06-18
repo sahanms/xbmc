@@ -5076,13 +5076,13 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
     int genreid = -1;
     bool bSongGenreDone(false);
     CVariant albumObj;
-    while (!m_pDS->eof())
+    while (!m_pDS->eof() || !albumObj.empty())
     {
       const dbiplus::sql_record* const record = m_pDS->get_sql_record();
 
-      if(albumId != record->at(0).get_asInt())
+      if (m_pDS->eof() || albumId != record->at(0).get_asInt())
       { 
-        // Store previous album
+        // Store previous or last album
         if (!albumObj.empty())
         {
           // Ensure albums with null songgenres get empty array
@@ -5105,7 +5105,9 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
           genreid = -1;
           bSongGenreDone = false;
         }
-        
+        if (m_pDS->eof())
+          continue; // Having saved last album stop
+
         // New album
         albumId = record->at(0).get_asInt();
         albumObj["albumid"] = albumId;
@@ -5634,13 +5636,13 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     bool bSongArtistDone(false);
     bool bAlbumArtistDone(false);
     CVariant songObj;
-    while (!m_pDS->eof())
+    while (!m_pDS->eof() || !songObj.empty())
     {
       const dbiplus::sql_record* const record = m_pDS->get_sql_record();
 
-      if (songId != record->at(0).get_asInt())
+      if (m_pDS->eof() || songId != record->at(0).get_asInt())
       {
-        // Store previous song
+        // Store previous or last song
         if (!songObj.empty())
         {
           // Check empty role fields get returned, and format
@@ -5673,7 +5675,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
 
           result["songs"].append(songObj);
 
-          songObj.clear();        
+          songObj.clear();
           albumartistId = -1;
           artistId = -1;
           roleId = -1;
@@ -5681,6 +5683,8 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
           bSongArtistDone = false;
           bAlbumArtistDone = false;
         }
+        if (m_pDS->eof())
+          continue;  // Having saved the last song stop
 
         // New song
         songId = record->at(0).get_asInt();
