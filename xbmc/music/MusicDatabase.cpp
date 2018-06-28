@@ -4749,43 +4749,43 @@ typedef struct
 {
   std::string fieldJSON;  // Field name in JSON schema
   std::string formatJSON; // Format in JSON schema
-  bool bJoined;           // Fetched using JOIN
+  bool bSimple;           // Fetch field directly to JSON output
   std::string fieldDB;    // Name of field in db query
-  std::string SQL;        // SQL for scalar subqueries
+  std::string SQL;        // SQL for scalar subqueries or field alias
 } translateJSONField;
 
 static const translateJSONField JSONtoDBAlbum[] = {
   // Table and single value join fields
-  { "title",                     "string", false, "strAlbum",               "" },
-  { "description",               "string", false, "strReview",              "" },
-  { "genre",                      "array", false, "strGenres",              "" },
-  { "theme",                      "array", false, "strThemes",              "" },
-  { "mood",                       "array", false, "strMoods",               "" },
-  { "style",                      "array", false, "strStyles",              "" },
-  { "type",                      "string", false, "strType",                "" },
-  { "albumlabel",                "string", false, "strLabel",               "" },
-  { "rating",                     "float", false, "fRating",                "" },
-  { "votes",                    "integer", false, "iVotes",                 "" },
-  { "userrating",               "integer", false, "iUserrating",            "" },
-  { "year",                     "integer", false, "iYear",                  "" },
-  { "musicbrainzalbumid",        "string", false, "strMusicBrainzAlbumID",  "" },
-  { "displayartist",             "string", false, "strArtistDisp",          "" },
-  { "compilation",              "boolean", false, "bCompilation",           "" },
-  { "releasetype",               "string", false, "strReleaseType",         "" },
-  { "sortartist",                "string", false, "strArtistSort",          "" },
-  { "musicbrainzreleasegroupid", "string", false, "strReleaseGroupMBID",    "" },
-  { "thumbnail",                 "string", false, "thumbnail",              "art.url AS thumbnail" }, // or (SELECT art.url FROM art WHERE art.media_id = album.idAlbum AND art.media_type = "album" AND art.type = "thumb") as url
+  { "title",                     "string", true,  "strAlbum",               "" },
+  { "description",               "string", true,  "strReview",              "" },
+  { "genre",                      "array", true,  "strGenres",              "" },
+  { "theme",                      "array", true,  "strThemes",              "" },
+  { "mood",                       "array", true,  "strMoods",               "" },
+  { "style",                      "array", true,  "strStyles",              "" },
+  { "type",                      "string", true,  "strType",                "" },
+  { "albumlabel",                "string", true,  "strLabel",               "" },
+  { "rating",                     "float", true,  "fRating",                "" },
+  { "votes",                    "integer", true,  "iVotes",                 "" },
+  { "userrating",               "integer", true,  "iUserrating",            "" },
+  { "year",                     "integer", true,  "iYear",                  "" },
+  { "musicbrainzalbumid",        "string", true,  "strMusicBrainzAlbumID",  "" },
+  { "displayartist",             "string", true,  "strArtistDisp",          "" },
+  { "compilation",              "boolean", true,  "bCompilation",           "" },
+  { "releasetype",               "string", true,  "strReleaseType",         "" },
+  { "sortartist",                "string", true,  "strArtistSort",          "" },
+  { "musicbrainzreleasegroupid", "string", true,  "strReleaseGroupMBID",    "" },
+  { "thumbnail",                 "string", true,  "thumbnail",              "art.url AS thumbnail" }, // or (SELECT art.url FROM art WHERE art.media_id = album.idAlbum AND art.media_type = "album" AND art.type = "thumb") as url
   // JOIN fields (multivalue), same order as _JoinToAlbumFields
-  { "artistid",                   "array", true, "idArtist",               "album_artist.idArtist AS idArtist" },
-  { "artist",                     "array", true, "strArtist",              "album_artist.strArtist AS strArtist" },
-  { "musicbrainzalbumartistid",   "array", true, "strArtistMBID",          "artist.strMusicBrainzArtistID AS strArtistMBID" },
-  { "songgenres",                 "array", true, "idSongGenre",            "song_genre.idGenre AS idSongGenre" },
-  { "",                                "", true, "strSongGenre",           "genre.strGenre AS strSongGenre" },
+  { "artistid",                   "array", false, "idArtist",               "album_artist.idArtist AS idArtist" },
+  { "artist",                     "array", false, "strArtist",              "album_artist.strArtist AS strArtist" },
+  { "musicbrainzalbumartistid",   "array", false, "strArtistMBID",          "artist.strMusicBrainzArtistID AS strArtistMBID" },
+  { "songgenres",                 "array", false, "idSongGenre",            "song_genre.idGenre AS idSongGenre" },
+  { "",                                "", false, "strSongGenre",           "genre.strGenre AS strSongGenre" },
   // Scalar subquery fields
-  { "playcount",               "integer", false,  "iTimesPlayed",           "(SELECT ROUND(AVG(song.iTimesPlayed)) FROM song WHERE song.idAlbum = album.idAlbum) AS iTimesPlayed" }, 
-  { "dateadded",                "string", false,  "dateAdded",              "(SELECT MAX(song.dateAdded) FROM song WHERE song.idAlbum = album.idAlbum) AS dateAdded" }, 
-  { "lastplayed",               "string", false,  "lastPlayed",             "(SELECT MAX(song.lastplayed) FROM song WHERE song.idAlbum = album.idAlbum) AS lastplayed" }, 
-  { "sourceid",                 "string", false,  "sourceid",               "(SELECT GROUP_CONCAT(album_source.idSource, '; ')  FROM album_source WHERE album_source.idAlbum = album.idAlbum) AS sources" }
+  { "playcount",                "integer", true, "iTimesPlayed",           "(SELECT ROUND(AVG(song.iTimesPlayed)) FROM song WHERE song.idAlbum = album.idAlbum) AS iTimesPlayed" }, 
+  { "dateadded",                 "string", true, "dateAdded",              "(SELECT MAX(song.dateAdded) FROM song WHERE song.idAlbum = album.idAlbum) AS dateAdded" }, 
+  { "lastplayed",                "string", true, "lastPlayed",             "(SELECT MAX(song.lastplayed) FROM song WHERE song.idAlbum = album.idAlbum) AS lastplayed" }, 
+  { "sourceid",                  "string", true, "sourceid",               "(SELECT GROUP_CONCAT(album_source.idSource, '; ')  FROM album_source WHERE album_source.idAlbum = album.idAlbum) AS sources" }
   /*
    Album "fanart" and "art" fields of JSON schema are fetched using
    thumbloader and separate queries to allow for fallback strategy
@@ -4904,11 +4904,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
     {
       if (fields.find(JSONtoDBAlbum[i].fieldJSON) != fields.end())
       {
-        if (JSONtoDBAlbum[i].bJoined)
-        {  // Field from join
-          joinLayout.SetField(i - index_idArtist, JSONtoDBAlbum[i].SQL, true);
-        }
-        else
+        if (JSONtoDBAlbum[i].bSimple)
         {
           // Store indexes of requested album table and scalar subquery fields 
           dbfieldindex.emplace_back(i);
@@ -4930,6 +4926,10 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
             // Field from album table
             extFilter.AppendField(JSONtoDBAlbum[i].fieldDB);
         }
+      }
+      else
+      {  // Field from join
+        joinLayout.SetField(i - index_idArtist, JSONtoDBAlbum[i].SQL, true);
       }
     }
 
@@ -5141,54 +5141,54 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
 
 static const translateJSONField JSONtoDBSong[] = {
   // table and single value join fields
-  { "albumid",                   "string", false,"song.idAlbum",           "" },
-  { "title",                     "string", false,"strTitle",               "" },
-  { "displayartist",             "string", false,"song.strArtistDisp",     "" },
-  { "sortartist",                "string", false,"song.strArtistSort",     "" },
-  { "genre",                      "array", false,"song.strGenres",         "" },
-  { "duration",                 "integer", false,"iDuration",              "" },
-  { "comment",                   "string", false,"comment",                "" },
-  { "year",                     "integer", false,"song.iYear",             "" },
-  { "",                          "string", false,"strFileName",            "" },
-  { "musicbrainztrackid",        "string", false,"strMusicBrainzTrackID",  "" },
-  { "playcount",                "integer", false,"iTimesPlayed",           "" },
-  { "lastplayed",                "string", false,"lastPlayed",             "" },
-  { "rating",                     "float", false,"rating",                 "" },
-  { "votes",                    "integer", false,"votes",                  "" },
-  { "userrating",               "integer", false,"song.userrating",        "" },
-  { "mood",                      "string", false,"mood",                   "" },
-  { "dateadded",                 "string", false,"dateAdded",              "" },
-  { "file",                      "string", false,"strPathFile",            "path.strPath || strFilename AS strPathFile" }, // More complex concat really needed??
-  { "",                          "string", false,"strPath",                "path.strPath AS strPath" },
-  { "album",                     "string", false,"strAlbum",               "album.strAlbum AS strAlbum" },
-  { "albumreleasetype",          "string", false,"strAlbumReleaseType",    "album.strReleaseType AS strAlbumReleaseType" },
-  { "musicbrainzalbumid",        "string", false,"strMusicBrainzAlbumID",  "album.strMusicBrainzAlbumID AS strMusicBrainzAlbumID" },
+  { "albumid",                   "string", true,  "song.idAlbum",           "" },
+  { "title",                     "string", true,  "strTitle",               "" },
+  { "displayartist",             "string", true,  "song.strArtistDisp",     "" },
+  { "sortartist",                "string", true,  "song.strArtistSort",     "" },
+  { "genre",                      "array", true,  "song.strGenres",         "" },
+  { "duration",                 "integer", true,  "iDuration",              "" },
+  { "comment",                   "string", true,  "comment",                "" },
+  { "year",                     "integer", true,  "song.iYear",             "" },
+  { "",                          "string", true,  "strFileName",            "" },
+  { "musicbrainztrackid",        "string", true,  "strMusicBrainzTrackID",  "" },
+  { "playcount",                "integer", true,  "iTimesPlayed",           "" },
+  { "lastplayed",                "string", true,  "lastPlayed",             "" },
+  { "rating",                     "float", true,  "rating",                 "" },
+  { "votes",                    "integer", true,  "votes",                  "" },
+  { "userrating",               "integer", true,  "song.userrating",        "" },
+  { "mood",                      "string", true,  "mood",                   "" },
+  { "dateadded",                 "string", true,  "dateAdded",              "" },
+  { "file",                      "string", true,  "strPathFile",            "path.strPath || strFilename AS strPathFile" }, // More complex concat really needed??
+  { "",                          "string", true,  "strPath",                "path.strPath AS strPath" },
+  { "album",                     "string", true,  "strAlbum",               "album.strAlbum AS strAlbum" },
+  { "albumreleasetype",          "string", true,  "strAlbumReleaseType",    "album.strReleaseType AS strAlbumReleaseType" },
+  { "musicbrainzalbumid",        "string", true,  "strMusicBrainzAlbumID",  "album.strMusicBrainzAlbumID AS strMusicBrainzAlbumID" },
 
   // JOIN fields (multivalue), same order as _JoinToSongFields 
-  { "albumartistid",              "array", true, "idAlbumArtist",          "album_artist.idArtist AS idAlbumArtist" },
-  { "albumartist",                "array", true, "strAlbumArtist",         "album_artist.strArtist AS strAlbumArtist" },
-  { "musicbrainzalbumartistid",   "array", true, "strAlbumArtistMBID",     "albumartist.strMusicBrainzArtistID AS strAlbumArtistMBID" },
-  { "",                                "", true, "iOrderAlbumArtist",      "album_artist.iOrder AS iOrderAlbumArtist" },
-  { "artistid",                   "array", true, "idArtist",               "song_artist.idArtist AS idArtist" },
-  { "artist",                     "array", true, "strArtist",              "song_artist.strArtist AS strArtist" },
-  { "musicbrainzartistid",        "array", true, "strArtistMBID",          "songartist.strMusicBrainzArtistID AS strArtistMBID" },
-  { "",                                "", true, "iOrderArtist",           "song_artist.iOrder AS iOrderArtist" },
-  { "",                                "", true, "idRole",                 "song_artist.idRole" },
-  { "",                                "", true, "strRole",                "role.strRole" },
-  { "",                                "", true, "iOrderRole",             "song_artist.iOrder AS iOrderRole" },
-  { "genreid",                    "array", true, "idGenre",                "song_genre.idGenre AS idGenre" }, // Not GROUP_CONCAT as can't control order
-  { "",                                "", true, "iOrderGenre",            "song_genre.idOrder AS iOrderGenre" },
+  { "albumartistid",              "array", false, "idAlbumArtist",          "album_artist.idArtist AS idAlbumArtist" },
+  { "albumartist",                "array", false, "strAlbumArtist",         "album_artist.strArtist AS strAlbumArtist" },
+  { "musicbrainzalbumartistid",   "array", false, "strAlbumArtistMBID",     "albumartist.strMusicBrainzArtistID AS strAlbumArtistMBID" },
+  { "",                                "", false, "iOrderAlbumArtist",      "album_artist.iOrder AS iOrderAlbumArtist" },
+  { "artistid",                   "array", false, "idArtist",               "song_artist.idArtist AS idArtist" },
+  { "artist",                     "array", false, "strArtist",              "song_artist.strArtist AS strArtist" },
+  { "musicbrainzartistid",        "array", false, "strArtistMBID",          "songartist.strMusicBrainzArtistID AS strArtistMBID" },
+  { "",                                "", false, "iOrderArtist",           "song_artist.iOrder AS iOrderArtist" },
+  { "",                                "", false, "idRole",                 "song_artist.idRole" },
+  { "",                                "", false, "strRole",                "role.strRole" },
+  { "",                                "", false, "iOrderRole",             "song_artist.iOrder AS iOrderRole" },
+  { "genreid",                    "array", false, "idGenre",                "song_genre.idGenre AS idGenre" }, // Not GROUP_CONCAT as can't control order
+  { "",                                "", false, "iOrderGenre",            "song_genre.idOrder AS iOrderGenre" },
 
-  { "contributors",               "array", true, "Role_All",               "song_artist.idRole AS Role_All" },
-  { "displaycomposer",           "string", true, "Role_Composer",          "song_artist.idRole AS Role_Composer" },
-  { "displayconductor",          "string", true, "Role_Conductor",         "song_artist.idRole AS Role_Conductor" },
-  { "displayorchestra",          "string", true, "Role_Orchestra",         "song_artist.idRole AS Role_Orchestra" },
-  { "displaylyricist",           "string", true, "Role_Lyricist",          "song_artist.idRole AS Role_Lyricist" },
+  { "contributors",               "array", false, "Role_All",               "song_artist.idRole AS Role_All" },
+  { "displaycomposer",           "string", false, "Role_Composer",          "song_artist.idRole AS Role_Composer" },
+  { "displayconductor",          "string", false, "Role_Conductor",         "song_artist.idRole AS Role_Conductor" },
+  { "displayorchestra",          "string", false, "Role_Orchestra",         "song_artist.idRole AS Role_Orchestra" },
+  { "displaylyricist",           "string", false, "Role_Lyricist",          "song_artist.idRole AS Role_Lyricist" },
   
   // Scalar subquery fields
-  { "track",                   "integer", false, "track",                  "(iTrack & 0xffff) AS track" },
-  { "disc",                    "integer", false, "disc",                   "(iTrack >> 16) AS disc" },
-  { "sourceid",                 "string", false, "sourceid",               "(SELECT GROUP_CONCAT(album_source.idSource, '; ') FROM album_source WHERE album_source.idAlbum = song.idAlbum) AS sources" } 
+  { "track",                    "integer", true,  "track",                  "(iTrack & 0xffff) AS track" },
+  { "disc",                     "integer", true,  "disc",                   "(iTrack >> 16) AS disc" },
+  { "sourceid",                  "string", true,  "sourceid",               "(SELECT GROUP_CONCAT(album_source.idSource, '; ') FROM album_source WHERE album_source.idAlbum = song.idAlbum) AS sources" } 
   /* 
   Song "thumbnail", "fanart" and "art" fields of JSON schema are fetched using
   thumbloader and separate queries to allow for fallback strategy
@@ -5328,18 +5328,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     {
       if (fields.find(JSONtoDBSong[i].fieldJSON) != fields.end())
       {
-        if (JSONtoDBSong[i].bJoined)
-        {  // Field from join
-          if (!StringUtils::StartsWith(JSONtoDBSong[i].fieldDB, "Role_"))
-          {
-            joinLayout.SetField(i - index_idAlbumArtist, JSONtoDBSong[i].SQL, true);
-          }
-          else
-          { // "contributors", "displaycomposer" etc.
-            rolefieldlist.emplace_back(JSONtoDBSong[i].fieldJSON);
-          }
-        }
-        else
+        if (JSONtoDBSong[i].bSimple)
         {
           // Store indexes of requested album table and scalar subquery fields 
           dbfieldindex.emplace_back(i);
@@ -5360,6 +5349,17 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
           else
             // Field from album table
             extFilter.AppendField(JSONtoDBSong[i].fieldDB);
+        }
+        else
+        {  // Field from join
+          if (!StringUtils::StartsWith(JSONtoDBSong[i].fieldDB, "Role_"))
+          {
+            joinLayout.SetField(i - index_idAlbumArtist, JSONtoDBSong[i].SQL, true);
+          }
+          else
+          { // "contributors", "displaycomposer" etc.
+            rolefieldlist.emplace_back(JSONtoDBSong[i].fieldJSON);
+          }
         }
       }
     }
