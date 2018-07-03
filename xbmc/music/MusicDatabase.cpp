@@ -5429,7 +5429,7 @@ static const translateJSONField JSONtoDBAlbum[] = {
   { "albumlabel",                "string", true,  "strLabel",               "" },
   { "rating",                     "float", true,  "fRating",                "" },
   { "votes",                    "integer", true,  "iVotes",                 "" },
-  { "userrating",               "integer", true,  "iUserrating",            "" },
+  { "userrating",              "unsigned", true,  "iUserrating",            "" },
   { "year",                     "integer", true,  "iYear",                  "" },
   { "musicbrainzalbumid",        "string", true,  "strMusicBrainzAlbumID",  "" },
   { "displayartist",             "string", true,  "strArtistDisp",          "" },
@@ -5437,10 +5437,10 @@ static const translateJSONField JSONtoDBAlbum[] = {
   { "releasetype",               "string", true,  "strReleaseType",         "" },
   { "sortartist",                "string", true,  "strArtistSort",          "" },
   { "musicbrainzreleasegroupid", "string", true,  "strReleaseGroupMBID",    "" },
-  { "thumbnail",                 "string", true,  "thumbnail",              "art.url AS thumbnail" }, // or (SELECT art.url FROM art WHERE art.media_id = album.idAlbum AND art.media_type = "album" AND art.type = "thumb") as url
+  { "thumbnail",                  "image", true,  "thumbnail",              "art.url AS thumbnail" }, // or (SELECT art.url FROM art WHERE art.media_id = album.idAlbum AND art.media_type = "album" AND art.type = "thumb") as url
   // JOIN fields (multivalue), same order as _JoinToAlbumFields
   { "artistid",                   "array", false, "idArtist",               "album_artist.idArtist AS idArtist" },
-  { "artist",                     "array", false, "strArtist",              "album_artist.strArtist AS strArtist" },
+  { "artist",                     "array", false, "strArtist",              "artist.strArtist AS strArtist" },
   { "musicbrainzalbumartistid",   "array", false, "strArtistMBID",          "artist.strMusicBrainzArtistID AS strArtistMBID" },
   { "songgenres",                 "array", false, "idSongGenre",            "song_genre.idGenre AS idSongGenre" },
   { "",                                "", false, "strSongGenre",           "genre.strGenre AS strSongGenre" },
@@ -5450,8 +5450,8 @@ static const translateJSONField JSONtoDBAlbum[] = {
   { "lastplayed",                "string", true, "lastPlayed",             "(SELECT MAX(song.lastplayed) FROM song WHERE song.idAlbum = album.idAlbum) AS lastplayed" }, 
   { "sourceid",                  "string", true, "sourceid",               "(SELECT GROUP_CONCAT(album_source.idSource, '; ')  FROM album_source WHERE album_source.idAlbum = album.idAlbum) AS sources" }
   /*
-   Album "fanart" and "art" fields of JSON schema are fetched using
-   thumbloader and separate queries to allow for fallback strategy
+   Album "fanart" and "art" fields of JSON schema are fetched using thumbloader
+   and separate queries to allow for fallback strategy
   */
 };
 
@@ -5540,7 +5540,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
       extFilter.AppendOrder("iUserrating" + DESC);
       extFilter.AppendOrder("strAlbum");
     }
-    else
+    else       // Always order table
       extFilter.AppendOrder("album.idAlbum");
 
     
@@ -5589,10 +5589,10 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
             // Field from album table
             extFilter.AppendField(JSONtoDBAlbum[i].fieldDB);
         }
-      }
-      else
-      {  // Field from join
-        joinLayout.SetField(i - index_idArtist, JSONtoDBAlbum[i].SQL, true);
+        else
+        {  // Field from join
+          joinLayout.SetField(i - index_idArtist, JSONtoDBAlbum[i].SQL, true);
+        }
       }
     }
 
@@ -5637,20 +5637,18 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
     if (joinLayout.GetFetch(joinToAlbum_idArtist) ||
         joinLayout.GetFetch(joinToAlbum_strArtist) ||
         joinLayout.GetFetch(joinToAlbum_strArtistMBID))
-    {  // album_artist (has artist name as well)
-       // All albums have at least one artist so inner join sufficient
+    { // All albums have at least one artist so inner join sufficient
       bJoinAlbumArtist = true;
       joinFilter.AppendJoin("JOIN album_artist ON album_artist.idAlbum = a1.idAlbum");
       joinFilter.AppendGroup("album_artist.idArtist");
       joinFilter.AppendOrder("album_artist.iOrder");
       // Ensure idArtist is queried 
       if (!joinLayout.GetFetch(joinToAlbum_idArtist))
-      {
         joinLayout.SetField(joinToAlbum_idArtist, JSONtoDBAlbum[index_idArtist + joinToAlbum_idArtist].SQL);
-      }
     }
-    // artist only needed for MBID
-    if (joinLayout.GetFetch(joinToAlbum_strArtistMBID))
+    // artist table needed for strArtist or MBID 
+    // (album_artist.strArtist can be an alias or spelling variation) 
+    if (joinLayout.GetFetch(joinToAlbum_strArtist) || joinLayout.GetFetch(joinToAlbum_strArtistMBID))
       joinFilter.AppendJoin("JOIN artist ON artist.idArtist = album_artist.idArtist");
 
     // Songgenres - id and genres always both
@@ -5755,17 +5753,25 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
           {
             if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "integer")
               albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asInt();
+            else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "unsigned")
+              albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = std::max(record->at(2 + i).get_asInt(), 0);
             else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "float")
-              albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asFloat();
+              albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = std::max(record->at(2 + i).get_asFloat(), 0.f);
             else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "array")
               albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = StringUtils::Split(record->at(2 + i).get_asString(), g_advancedSettings.m_musicItemSeparator);
             else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "boolean")
               albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asBool();
+            else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "image")
+            {
+              std::string url = record->at(2 + i).get_asString();
+              if (!url.empty())
+                url = CTextureUtils::GetWrappedImageURL(url);
+              albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = url;
+            }
             else
               albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asString();
           }
       }
-      //! @todo: what about "texture" from join?
       if (bJoinAlbumArtist)
       {
         if (artistId != record->at(joinLayout.GetRecNo(joinToAlbum_idArtist)).get_asInt())
@@ -5777,7 +5783,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
           if (joinLayout.GetOutput(joinToAlbum_strArtist))
             albumObj["artist"].append(record->at(joinLayout.GetRecNo(joinToAlbum_strArtist)).get_asString());
           if (joinLayout.GetOutput(joinToAlbum_strArtistMBID))
-            albumObj["musicbrainzartistid"].append(record->at(joinLayout.GetRecNo(joinToAlbum_strArtistMBID)).get_asString());
+            albumObj["musicbrainzalbumartistid"].append(record->at(joinLayout.GetRecNo(joinToAlbum_strArtistMBID)).get_asString());
         }        
       }
       if (!bSongGenreDone && joinLayout.GetRecNo(joinToAlbum_idSongGenre) > -1 &&
