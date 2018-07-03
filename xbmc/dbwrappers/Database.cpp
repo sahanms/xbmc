@@ -161,9 +161,6 @@ CDatabase::DatasetLayout::DatasetLayout(size_t totalfields)
 
 void CDatabase::DatasetLayout::SetField(int fieldNo, const std::string &strField, bool bOutput /*= false*/)
 {  
-  if (strField.empty())
-    return;
-
   if (fieldNo >= 0 && fieldNo < fields.size())
   {
     fields[fieldNo].strField = strField;

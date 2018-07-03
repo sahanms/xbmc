@@ -470,10 +470,12 @@ public:
   // JSON-RPC 
   /////////////////////////////////////////////////
   bool GetGenresJSON(CFileItemList& items, bool bSources = false);
-  bool GetAlbumsByWhereJSON(const std::set<std::string>& fields, const std::string &baseDir,  
-    CVariant& result, int& total, const SortDescription &sortDescription = SortDescription());
-  bool GetSongsByWhereJSON(const std::set<std::string>& fields, const std::string &baseDir,
-    CVariant& result, int& total, const SortDescription &sortDescription = SortDescription());
+  bool GetArtistsByWhereJSON(const std::set<std::string>& fields, const std::string& baseDir,
+    CVariant& result, int& total, const SortDescription& sortDescription = SortDescription());
+  bool GetAlbumsByWhereJSON(const std::set<std::string>& fields, const std::string& baseDir,
+    CVariant& result, int& total, const SortDescription& sortDescription = SortDescription());
+  bool GetSongsByWhereJSON(const std::set<std::string>& fields, const std::string& baseDir,
+    CVariant& result, int& total, const SortDescription& sortDescription = SortDescription());
 
   /////////////////////////////////////////////////
   // Scraper
@@ -793,6 +795,28 @@ private:
     artist_enumCount // end of the enum, do not add past here
   } ArtistFields;
 
+  // Fields fetched by GetArtistsByWhereJSON,  order same as in JSONtoDBArtist
+  static enum _JoinToArtistFields
+  {
+    joinToArtist_isSong = 0,
+    joinToArtist_idSourceAlbum,
+    joinToArtist_idSourceSong,
+    joinToArtist_idSongGenreAlbum,
+    joinToArtist_idSongGenreSong,
+    joinToArtist_strSongGenreAlbum,
+    joinToArtist_strSongGenreSong,
+    joinToArtist_idArt,
+    joinToArtist_artType,
+    joinToArtist_artURL,
+    joinToArtist_idRole,
+    joinToArtist_strRole,
+    joinToArtist_iOrderRole,
+    joinToArtist_isalbumartist,
+    joinToArtist_thumbnail,
+    joinToArtist_fanart,
+    joinToArtist_enumCount // end of the enum, do not add past here
+  } JoinToArtistFields;
+
   // Fields fetched by GetAlbumsByWhereJSON,  order same as in JSONtoDBAlbum
   static enum _JoinToAlbumFields
   {
@@ -803,7 +827,6 @@ private:
     joinToAlbum_strSongGenre,
     joinToAlbum_enumCount // end of the enum, do not add past here
   } JoinToAlbumFields;
-
 
   // Fields fetched by GetSongsByWhereJSON,  order same as in JSONtoDBSong
   static enum _JoinToSongFields

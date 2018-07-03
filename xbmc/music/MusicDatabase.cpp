@@ -4754,6 +4754,669 @@ typedef struct
   std::string SQL;        // SQL for scalar subqueries or field alias
 } translateJSONField;
 
+static const translateJSONField JSONtoDBArtist[] = {
+  // Table and single value join fields
+  { "artist",                    "string", true,  "strArtist",              "" },
+  { "sortname",                  "string", true,  "strSortname",            "" },
+  { "instrument",                 "array", true,  "strInstruments",         "" },
+  { "description",               "string", true,  "strBiography",           "" },
+  { "genre",                      "array", true,  "strGenres",              "" },
+  { "mood",                       "array", true,  "strMoods",               "" },
+  { "style",                      "array", true,  "strStyles",              "" },
+  { "yearsactive",                "array", true,  "strYearsActive",         "" },
+  { "born",                      "string", true,  "strBorn",                "" },
+  { "formed",                    "string", true,  "strFormed",              "" },
+  { "died",                      "string", true,  "strDied",                "" },
+  { "disbanded",                 "string", true,  "strDisbanded",           "" },
+  { "type",                      "string", true,  "strType",                "" },
+  { "gender",                    "string", true,  "strGender",              "" },
+  { "disambiguation",            "string", true,  "strDisambiguation",      "" },
+  { "musicbrainzartistid",       "string", true,  "strMusicBrainzArtistId", "" }, // Array in schema, but only ever one element
+                                                                                  // Scalar subquery fields
+  { "dateadded",                 "string", true,  "dateAdded",              "(SELECT MAX(song.dateAdded) FROM song_artist JOIN song ON song.idSong = song_artist.idSong WHERE song_artist.idArtist = artist.idArtist) AS dateAdded" },
+
+  // JOIN fields (multivalue), same order as _JoinToArtistFields
+  { "",                                "", false, "isSong",                 "" },
+  { "sourceid",                  "string", false, "idSourceAlbum",          "album_source.idSource AS idSourceAlbum" },
+  { "",                          "string", false, "idSourceSong",           "album_source.idSource AS idSourceSong" },
+  { "songgenres",                 "array", false, "idSongGenreAlbum",       "song_genre.idGenre AS idSongGenreAlbum" },
+  { "",                           "array", false, "idSongGenreSong",        "song_genre.idGenre AS idSongGenreSong" },
+  { "",                                "", false, "strSongGenreAlbum",      "genre.strGenre AS strSongGenreAlbum" },
+  { "",                                "", false, "strSongGenreSong",       "genre.strGenre AS strSongGenreSong" },
+  { "art",                             "", false, "idArt",                  "art.art_id AS idArt" },
+  { "",                                "", false, "artType",                "art.type AS artType" },
+  { "",                                "", false, "artURL",                 "art.url AS artURL" },
+  { "",                                "", false, "idRole",                 "song_artist.idRole" },
+  { "roles",                           "", false, "strRole",                "role.strRole" },
+  { "",                                "", false, "iOrderRole",             "song_artist.iOrder AS iOrderRole" },
+  // Derived from joined tables
+  { "isalbumartist",               "bool", false, "",                       "" },
+  { "thumbnail",                 "string", false, "",                       "" },
+  { "fanart",                    "string", false, "",                       "" }
+
+  /*
+  Sources and genre are related via album, and so the dataset only contains source
+  and genre pairs that exist, rather than all the genres being repeated for every
+  source. We can not only look at genres for the first source, and genre can be
+  out of order.
+  */
+
+};
+
+static const size_t NUM_ARTIST_FIELDS = sizeof(JSONtoDBArtist) / sizeof(translateJSONField);
+
+bool CMusicDatabase::GetArtistsByWhereJSON(const std::set<std::string>& fields, const std::string &baseDir,
+  CVariant& result, int& total, const SortDescription &sortDescription /* = SortDescription() */)
+{
+  if (NULL == m_pDB.get()) return false;
+  if (NULL == m_pDS.get()) return false;
+
+  try
+  {
+    total = -1;
+
+    Filter extFilter;
+    CMusicDbUrl musicUrl;
+    SortDescription sorting = sortDescription;
+    //! @todo: replace GetFilter to avoid exists as well as JOIn to albm_artist and song_artist tables
+    if (!musicUrl.FromString(baseDir) || !GetFilter(musicUrl, extFilter, sorting))
+      return false;
+
+    // Replace view names in filter with table names
+    StringUtils::Replace(extFilter.where, "artistview", "artist");
+    StringUtils::Replace(extFilter.where, "albumview", "album");
+
+    std::string strSQLExtra;
+    if (!BuildSQL(strSQLExtra, extFilter, strSQLExtra))
+      return false;
+
+    // Count number of artists that satisfy selection criteria 
+    //(includes xsp limits from filter, but not sort limits)
+    total = (int)strtol(GetSingleValue("SELECT COUNT(1) FROM artist " + strSQLExtra, m_pDS).c_str(), NULL, 10);
+
+    // Process albumartistsonly option
+    const CUrlOptions::UrlOptions& options = musicUrl.GetOptions();
+    bool albumArtistsOnly(false);
+    auto option = options.find("albumartistsonly");
+    if (option != options.end())
+      albumArtistsOnly = option->second.asBoolean();
+    // Process role options
+    int roleidfilter = 1; // Default restrict song_artist to "artists" only, no other roles.
+    option = options.find("roleid");
+    if (option != options.end())
+      roleidfilter = static_cast<int>(option->second.asInteger());
+    else
+    {
+      option = options.find("role");
+      if (option != options.end())
+      {
+        if (option->second.asString() == "all" || option->second.asString() == "%")
+          roleidfilter = -1000; //All roles
+        else
+          roleidfilter = GetRoleByName(option->second.asString());
+      }
+    }
+
+    //! @todo: use SortAttributeUseArtistSortName and remove articles
+    std::string DESC;
+    if (sortDescription.sortOrder == SortOrderDescending)
+      DESC = " DESC";
+    if (sortDescription.sortBy == SortByRandom)
+      extFilter.AppendOrder("RANDOM()");
+    else if (sortDescription.sortBy == SortByArtist)
+    {
+      extFilter.AppendOrder("strArtist" + DESC);
+    }
+    else if (sortDescription.sortBy == SortByDateAdded)
+    {
+      extFilter.AppendOrder("dateAdded" + DESC);
+    }
+    else
+      // Always order table
+      extFilter.AppendOrder("artist.idArtist");
+
+    std::string strSQL;
+
+    // Setup fields to query, and album field number mapping
+    // Find first join field (isSong) in JSONtoDBArtist for offset 
+    int index_firstjoin = -1;
+    for (unsigned int i = 0; i < NUM_ARTIST_FIELDS; i++)
+    {
+      if (JSONtoDBArtist[i].fieldDB == "isSong")
+      {
+        index_firstjoin = i;
+        break;
+      }
+    }
+    Filter joinFilter;
+    Filter albumArtistFilter;
+    Filter songArtistFilter;
+    DatasetLayout joinLayout(static_cast<size_t>(joinToArtist_enumCount));
+    extFilter.AppendField("artist.idArtist");  // ID "artistid" in JSON
+    extFilter.AppendField("strArtist");  // label in JSON
+    std::vector<int> dbfieldindex;
+    // Check each artist db field that could be retrieved
+    for (unsigned int i = 0; i < NUM_ARTIST_FIELDS; i++)
+    {
+      if (fields.find(JSONtoDBArtist[i].fieldJSON) != fields.end())
+      {
+        if (JSONtoDBArtist[i].bSimple)
+        {
+          // Store indexes of requested artist table and scalar subquery fields 
+          dbfieldindex.emplace_back(i);
+          // Field from scaler subquery
+          if (!JSONtoDBArtist[i].SQL.empty())
+            extFilter.AppendField(JSONtoDBArtist[i].SQL);
+          else
+            // Field from album table
+            extFilter.AppendField(JSONtoDBArtist[i].fieldDB);
+        }
+        else
+        {
+          // Field from join or derived from joined fields
+          joinLayout.SetField(i - index_firstjoin, JSONtoDBArtist[i].fieldDB, true);
+        }
+      }
+    }
+
+    // All order fields must be in the inline view query too
+    std::string order = extFilter.order;
+    StringUtils::Replace(order, " DESC,", ",");
+    std::vector<std::string> orderfields = StringUtils::Split(order, ", ");
+    for (const auto& name : orderfields)
+    {
+      if (extFilter.fields.find(name) == std::string::npos)
+      {
+        extFilter.AppendField(name);
+        dbfieldindex.emplace_back(-1);
+      }
+    }
+
+    // Build JOIN, WHERE, ORDER BY and LIMIT for inline view
+    strSQLExtra = "";
+    if (!BuildSQL(strSQLExtra, extFilter, strSQLExtra))
+      return false;
+
+    // Add any LIMIT clause to strSQLExtra
+    if (extFilter.limit.empty() &&
+      (sortDescription.limitStart > 0 || sortDescription.limitEnd > 0))
+    {
+      strSQLExtra += DatabaseUtils::BuildLimitClause(sortDescription.limitEnd, sortDescription.limitStart);
+    }
+
+    // Setup multivalue JOINs, GROUP BY and ORDER BY
+    bool bJoinAlbumArtist(false);
+    bool bJoinSongArtist(false);
+    StringUtils::Replace(order, "artist.", "a1.");
+    joinFilter.AppendOrder(order);
+    joinFilter.AppendGroup("a1.idArtist");
+    // Album artists and song artists
+    if (joinLayout.GetFetch(joinToArtist_isalbumartist) ||
+      joinLayout.GetFetch(joinToArtist_idSourceAlbum) ||
+      joinLayout.GetFetch(joinToArtist_idSongGenreAlbum) ||
+      joinLayout.GetFetch(joinToArtist_strRole))
+    {
+      bJoinAlbumArtist = true;
+      albumArtistFilter.AppendGroup("album_artist.idArtist");
+      albumArtistFilter.AppendField("album_artist.idArtist AS id");
+      if (!albumArtistsOnly || joinLayout.GetFetch(joinToArtist_strRole))
+      {
+        bJoinSongArtist = true;
+        songArtistFilter.AppendGroup("song_artist.idArtist");
+        songArtistFilter.AppendField("song_artist.idArtist AS id");
+        songArtistFilter.AppendField("1 AS isSong");
+        albumArtistFilter.AppendField("0 AS isSong");
+        joinLayout.SetField(joinToArtist_isSong, JSONtoDBArtist[index_firstjoin + joinToArtist_isSong].fieldDB);
+        joinFilter.AppendOrder(JSONtoDBArtist[index_firstjoin + joinToArtist_isSong].fieldDB);
+      }
+    }
+
+    // Sources
+    if (joinLayout.GetFetch(joinToArtist_idSourceAlbum))
+    { // Left join as source may have been removed but leaving lib entries      
+      albumArtistFilter.AppendJoin("LEFT JOIN album_source ON album_source.idAlbum = album_artist.idAlbum");
+      albumArtistFilter.AppendGroup("album_source.idSource");
+      albumArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceAlbum].SQL);
+      joinFilter.AppendGroup(JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceAlbum].fieldDB);
+      joinFilter.AppendOrder(JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceAlbum].fieldDB);
+      if (bJoinSongArtist)
+      {
+        songArtistFilter.AppendJoin("JOIN song ON song.idSong = song_artist.idSong");
+        songArtistFilter.AppendJoin("LEFT JOIN album_source ON album_source.idAlbum = song.idAlbum");
+        songArtistFilter.AppendGroup("album_source.idSource");
+        songArtistFilter.AppendField("-1 AS " + JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceAlbum].fieldDB);
+        songArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceSong].SQL);
+        albumArtistFilter.AppendField("-1 AS " + JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceSong].fieldDB);
+        joinLayout.SetField(joinToArtist_idSourceSong, JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceSong].fieldDB);
+        joinFilter.AppendGroup(JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceSong].fieldDB);
+        joinFilter.AppendOrder(JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceSong].fieldDB);
+      }
+      else
+      {
+        joinLayout.SetField(joinToArtist_idSourceAlbum, JSONtoDBArtist[index_firstjoin + joinToArtist_idSourceAlbum].SQL, true);
+      }
+    }
+
+    // Songgenres - id and genres always both
+    if (joinLayout.GetFetch(joinToArtist_idSongGenreAlbum))
+    { // All albums have songs, but left join genre as songs may not have genre
+      albumArtistFilter.AppendJoin("JOIN song ON song.idAlbum = album_artist.idAlbum");
+      albumArtistFilter.AppendJoin("LEFT JOIN song_genre ON song_genre.idSong = song.idSong");
+      albumArtistFilter.AppendJoin("LEFT JOIN genre ON genre.idGenre = song_genre.idGenre");
+      albumArtistFilter.AppendGroup("genre.idGenre");
+      albumArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreAlbum].SQL);
+      albumArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_strSongGenreAlbum].SQL);
+      joinLayout.SetField(joinToArtist_strSongGenreAlbum, JSONtoDBArtist[index_firstjoin + joinToArtist_strSongGenreAlbum].fieldDB);
+      joinFilter.AppendGroup(JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreAlbum].fieldDB);
+      joinFilter.AppendOrder(JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreAlbum].fieldDB);
+      if (bJoinSongArtist)
+      { // Left join genre as songs may not have genre
+        songArtistFilter.AppendJoin("LEFT JOIN song_genre ON song_genre.idSong = song_artist.idSong");
+        songArtistFilter.AppendJoin("LEFT JOIN genre ON genre.idGenre = song_genre.idGenre");
+        songArtistFilter.AppendGroup("genre.idGenre");
+        songArtistFilter.AppendField("-1 AS " + JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreAlbum].fieldDB);
+        songArtistFilter.AppendField("'' AS " + JSONtoDBArtist[index_firstjoin + joinToArtist_strSongGenreAlbum].fieldDB);
+        songArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreSong].SQL);
+        songArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_strSongGenreSong].SQL);
+        albumArtistFilter.AppendField("-1 AS " + JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreSong].fieldDB);
+        albumArtistFilter.AppendField("'' AS " + JSONtoDBArtist[index_firstjoin + joinToArtist_strSongGenreSong].fieldDB);
+        joinLayout.SetField(joinToArtist_idSongGenreSong, JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreSong].fieldDB);
+        joinLayout.SetField(joinToArtist_strSongGenreSong, JSONtoDBArtist[index_firstjoin + joinToArtist_strSongGenreSong].fieldDB);
+        joinFilter.AppendGroup(JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreSong].fieldDB);
+        joinFilter.AppendOrder(JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreSong].fieldDB);
+      }
+      else
+      {  // Define field alias names in join layout
+        joinLayout.SetField(joinToArtist_idSongGenreAlbum, JSONtoDBArtist[index_firstjoin + joinToArtist_idSongGenreAlbum].SQL, true);
+        joinLayout.SetField(joinToArtist_strSongGenreAlbum, JSONtoDBArtist[index_firstjoin + joinToArtist_strSongGenreAlbum].SQL);
+      }
+    }
+
+    // Roles
+    if (roleidfilter == 1 && !joinLayout.GetFetch(joinToArtist_strRole))
+      // Only looking at album and song artists not other roles (default), 
+      // so filter dataset rows likewise. 
+      songArtistFilter.AppendWhere("song_artist.idRole = 1");
+    else if (joinLayout.GetFetch(joinToArtist_strRole) ||  // "roles" field
+      bJoinSongArtist &&
+      (joinLayout.GetFetch(joinToArtist_idSourceAlbum) ||
+        joinLayout.GetFetch(joinToArtist_idSongGenreAlbum)))
+    { // Rows from many roles so fetch roleid for "roles", source and genre processing
+      songArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_idRole].SQL);
+      songArtistFilter.AppendGroup(JSONtoDBArtist[index_firstjoin + joinToArtist_idRole].SQL);
+      // Add fake column to album_artist query
+      albumArtistFilter.AppendField("-1 AS " + JSONtoDBArtist[index_firstjoin + joinToArtist_idRole].fieldDB);
+      joinLayout.SetField(joinToArtist_idRole, JSONtoDBArtist[index_firstjoin + joinToArtist_idRole].fieldDB);
+      joinFilter.AppendGroup(JSONtoDBArtist[index_firstjoin + joinToArtist_idRole].fieldDB);
+      joinFilter.AppendOrder(JSONtoDBArtist[index_firstjoin + joinToArtist_idRole].fieldDB);
+    }
+    if (joinLayout.GetFetch(joinToArtist_strRole))
+    { // Fetch role desc
+      songArtistFilter.AppendJoin("JOIN role ON role.idRole = song_artist.idRole");
+      songArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_strRole].SQL);
+      // Add fake column to album_artist query
+      albumArtistFilter.AppendField("'albumartist' AS " + JSONtoDBArtist[index_firstjoin + joinToArtist_strRole].fieldDB);
+    }
+
+    // Build source, genre and roles part of query
+    if (bJoinAlbumArtist)
+    {
+      if (bJoinSongArtist)
+      {
+        // Combine song and album artist filter as UNION and add to join filter as an inline view
+        std::string strAlbumSQL;
+        if (!BuildSQL(strAlbumSQL, albumArtistFilter, strAlbumSQL))
+          return false;
+        strAlbumSQL = "SELECT " + albumArtistFilter.fields + " FROM album_artist " + strAlbumSQL;
+        std::string strSongSQL;
+        if (!BuildSQL(strSongSQL, songArtistFilter, strSongSQL))
+          return false;
+        strSongSQL = "SELECT " + songArtistFilter.fields + " FROM song_artist " + strSongSQL;
+
+        joinFilter.AppendJoin("JOIN ((" + strAlbumSQL + " UNION " + strSongSQL + ") AS albumSong) ON id = a1.idArtist");
+      }
+      else
+      { //Only join album_artist, so move filter elements to join filter
+        joinFilter.AppendJoin("JOIN album_artist ON album_artist.idArtist = a1.idArtist");
+        joinFilter.AppendJoin(albumArtistFilter.join);
+      }
+    }
+
+    //Art
+    bool bJoinArt(false);
+    bJoinArt = joinLayout.GetFetch(joinToArtist_idArt) ||
+      joinLayout.GetFetch(joinToArtist_thumbnail) ||
+      joinLayout.GetFetch(joinToArtist_fanart);
+    if (bJoinArt)
+    { // Left join as artist may not have any art
+      joinFilter.AppendJoin("LEFT JOIN art ON art.media_id = a1.idArtist AND art.media_type = 'artist'");
+      joinLayout.SetField(joinToArtist_idArt, JSONtoDBArtist[index_firstjoin + joinToArtist_idArt].SQL, true);
+      joinLayout.SetField(joinToArtist_artType, JSONtoDBArtist[index_firstjoin + joinToArtist_artType].SQL);
+      joinLayout.SetField(joinToArtist_artURL, JSONtoDBArtist[index_firstjoin + joinToArtist_artURL].SQL);
+      joinFilter.AppendGroup("art.art_id");
+      joinFilter.AppendOrder("arttype");
+      if (!joinLayout.GetFetch(joinToArtist_idArt))
+      {
+        if (!joinLayout.GetFetch(joinToArtist_thumbnail))
+          // Fanart only
+          joinFilter.AppendWhere("art.type = 'fanart'");
+        else
+          // Thumb only
+          joinFilter.AppendWhere("art.type = 'thumb'");
+      }
+    }
+
+    // Build JOIN part of query (if we have one)
+    std::string strSQLJoin;
+    if (joinLayout.HasFilterFields())
+      if (!BuildSQL(strSQLJoin, joinFilter, strSQLJoin))
+        return false;
+
+    // Adjust where in the results record the join fields are allowing for the
+    // inline view fields (Quicker than finding field by name every time)
+    // idArtist, strArtist, + optional artist fields    
+    joinLayout.AdjustRecordNumbers(2 + dbfieldindex.size());
+
+    // Build full query
+    // When have multiple value joins e.g. song genres, use inline view
+    // SELECT a1.*, <join fields> FROM 
+    //   (SELECT <artist fields> FROM artist <where> + <order by> +  <limits> ) AS a1 
+    //   <joins> <group by> <order by> + <joins order by>
+    // Don't use prepareSQL - confuses  arttype = 'thumb' filter 
+
+    strSQL = "SELECT " + extFilter.fields + " FROM artist " + strSQLExtra;
+    if (joinLayout.HasFilterFields())
+    {
+      strSQL = "(" + strSQL + ") AS a1 ";
+      strSQL = "SELECT a1.*, " + joinLayout.GetFields() + " FROM " + strSQL + strSQLJoin;
+    }
+
+    CLog::Log(LOGDEBUG, "%s query: %s", __FUNCTION__, strSQL.c_str());
+    // run query
+    unsigned int time = XbmcThreads::SystemClockMillis();
+    if (!m_pDS->query(strSQL))
+      return false;
+    CLog::Log(LOGDEBUG, "%s - query took %i ms",
+      __FUNCTION__, XbmcThreads::SystemClockMillis() - time); time = XbmcThreads::SystemClockMillis();
+
+    int iRowsFound = m_pDS->num_rows();
+    if (iRowsFound <= 0)
+    {
+      m_pDS->close();
+      return true;
+    }
+
+    DatabaseResults dbResults;
+    dbResults.reserve(iRowsFound);
+
+    // Get artists from returned rows. Joins means there can be many rows per artist
+    int artistId = -1;
+    int sourceId = -1;
+    int genreId = -1;
+    int roleId = -1;
+    int artId = -1;
+    std::vector<int> genreidlist;
+    std::vector<int> sourceidlist;
+    std::vector<int> roleidlist;
+    bool bArtDone(false);
+    bool bHaveArtist(false);
+    bool bIsAlbumArtist(true);
+    bool bGenreFoundViaAlbum(false);
+    CVariant artistObj;
+    while (!m_pDS->eof() || bHaveArtist)
+    {
+      const dbiplus::sql_record* const record = m_pDS->get_sql_record();
+
+      if (m_pDS->eof() || artistId != record->at(0).get_asInt())
+      {
+        // Store previous or last song
+        if (bHaveArtist)
+        {
+          // Convert the MBid sting entry into an array of at most one element (schema flaw)
+          if (artistObj.isMember("musicbrainzartistid"))
+          {
+            std::string mbid = artistObj["musicbrainzartistid"].asString();
+            artistObj["musicbrainzartistid"].clear();
+            artistObj["musicbrainzartistid"] = CVariant(CVariant::VariantTypeArray);
+            if (!mbid.empty())
+              artistObj["musicbrainzartistid"].append(mbid);
+          }
+
+          result["artists"].append(artistObj);
+          bHaveArtist = false;
+          artistObj.clear();
+        }
+        if (artistObj.empty())
+        {
+          // Initialise fields, ensure those with possible null values are set to correct empty variant type
+          if (joinLayout.GetOutput(joinToArtist_idSourceAlbum))
+            artistObj["sourceid"] = CVariant(CVariant::VariantTypeArray);
+          if (joinLayout.GetOutput(joinToArtist_idSongGenreAlbum))
+            artistObj["songgenres"] = CVariant(CVariant::VariantTypeArray);
+          if (joinLayout.GetOutput(joinToArtist_idArt))
+            artistObj["art"] = CVariant(CVariant::VariantTypeObject);
+          if (joinLayout.GetOutput(joinToArtist_thumbnail))
+            artistObj["thumbnail"] = "";
+          if (joinLayout.GetOutput(joinToArtist_fanart))
+            artistObj["fanart"] = "";
+
+          sourceId = -1;
+          roleId = -1;
+          genreId = -1;
+          artId = -1;
+          genreidlist.clear();
+          bGenreFoundViaAlbum = false;
+          sourceidlist.clear();
+          roleidlist.clear();
+          bArtDone = false;
+          bIsAlbumArtist = true;
+        }
+        if (m_pDS->eof())
+          continue;  // Having saved the last artist stop
+
+                     // New artist
+        artistId = record->at(0).get_asInt();
+        bHaveArtist = true;
+        artistObj["artistid"] = artistId;
+        artistObj["label"] = record->at(1).get_asString();
+        artistObj["artist"] = record->at(1).get_asString(); // Always have "artist"
+        artistObj["type"] = MediaTypeArtist;
+        bIsAlbumArtist = bJoinAlbumArtist;  //Album artist by default
+        if (bJoinSongArtist)
+        {
+          bIsAlbumArtist = !record->at(joinLayout.GetRecNo(joinToArtist_isSong)).get_asBool();
+          if (joinLayout.GetOutput(joinToArtist_isalbumartist))
+            artistObj["isalbumartist"] = bIsAlbumArtist;
+        }
+        for (size_t i = 0; i < dbfieldindex.size(); i++)
+          if (dbfieldindex[i] > -1)
+          {
+            if (JSONtoDBArtist[dbfieldindex[i]].formatJSON == "integer")
+              artistObj[JSONtoDBArtist[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asInt();
+            else if (JSONtoDBArtist[dbfieldindex[i]].formatJSON == "float")
+              artistObj[JSONtoDBArtist[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asFloat();
+            else if (JSONtoDBArtist[dbfieldindex[i]].formatJSON == "array")
+              artistObj[JSONtoDBArtist[dbfieldindex[i]].fieldJSON] =
+              StringUtils::Split(record->at(2 + i).get_asString(), g_advancedSettings.m_musicItemSeparator);
+            else if (JSONtoDBArtist[dbfieldindex[i]].formatJSON == "boolean")
+              artistObj[JSONtoDBArtist[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asBool();
+            else
+              artistObj[JSONtoDBArtist[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asString();
+          }
+      }
+      if (bJoinAlbumArtist)
+      {
+        bool bAlbumArtistRow(true);
+        int idRoleRow = -1;
+        if (bJoinSongArtist)
+        {
+          bAlbumArtistRow = !record->at(joinLayout.GetRecNo(joinToArtist_isSong)).get_asBool();
+          if (joinLayout.GetRecNo(joinToArtist_idRole) > -1 &&
+            !record->at(joinLayout.GetRecNo(joinToArtist_idRole)).get_isNull())
+          {
+            idRoleRow = record->at(joinLayout.GetRecNo(joinToArtist_idRole)).get_asInt();
+          }
+        }
+
+        // Sources - gathered via both album_artist and song_artist (with role = 1)       
+        if (joinLayout.GetFetch(joinToArtist_idSourceAlbum))
+        {
+          if ((bAlbumArtistRow && joinLayout.GetRecNo(joinToArtist_idSourceAlbum) > -1 &&
+            !record->at(joinLayout.GetRecNo(joinToArtist_idSourceAlbum)).get_isNull() &&
+            sourceId != record->at(joinLayout.GetRecNo(joinToArtist_idSourceAlbum)).get_asInt()) ||
+            (!bAlbumArtistRow && joinLayout.GetRecNo(joinToArtist_idSourceSong) > -1 &&
+              !record->at(joinLayout.GetRecNo(joinToArtist_idSourceSong)).get_isNull() &&
+              sourceId != record->at(joinLayout.GetRecNo(joinToArtist_idSourceSong)).get_asInt()))
+          {
+            bArtDone = bArtDone || (sourceId > 0);  // Not first source, skip art repeats
+            bool found(false);
+            sourceId = record->at(joinLayout.GetRecNo(joinToArtist_idSourceAlbum)).get_asInt();
+            if (!bAlbumArtistRow)
+            {
+              // Skip other roles (when fetching them)
+              if (idRoleRow > 1)
+              {
+                found = true;
+              }
+              else
+              {
+                sourceId = record->at(joinLayout.GetRecNo(joinToArtist_idSourceSong)).get_asInt();
+                // Song artist row may repeat sources found via album artist
+                // Already have that source? 
+                for (const auto& i : sourceidlist)
+                  if (i == sourceId)
+                  {
+                    found = true;
+                    break;
+                  }
+              }
+            }
+            if (!found)
+            {
+              sourceidlist.emplace_back(sourceId);
+              artistObj["sourceid"].append(sourceId);
+            }
+          }
+        }
+        // Songgenres - via album artist takes precedence
+        /*
+        Sources and genre are related via album, and so the dataset only contains source
+        and genre pairs that exist, rather than all the genres being repeated for every
+        source. We can not only look at genres for the first source, and genre can be
+        found out of order.
+        Also song artist row may repeat genres found via album artist
+        */
+        if (joinLayout.GetFetch(joinToArtist_idSongGenreAlbum))
+        {
+          std::string strGenre;
+          bool newgenre(false);
+          if (bAlbumArtistRow && joinLayout.GetRecNo(joinToArtist_idSongGenreAlbum) > -1 &&
+            !record->at(joinLayout.GetRecNo(joinToArtist_idSongGenreAlbum)).get_isNull() &&
+            genreId != record->at(joinLayout.GetRecNo(joinToArtist_idSongGenreAlbum)).get_asInt())
+          {
+            bArtDone = bArtDone || (genreId > 0);  // Not first genre, skip art repeats
+            newgenre = true;
+            genreId = record->at(joinLayout.GetRecNo(joinToArtist_idSongGenreAlbum)).get_asInt();
+            strGenre = record->at(joinLayout.GetRecNo(joinToArtist_strSongGenreAlbum)).get_asString();
+          }
+          else if (!bAlbumArtistRow && !bGenreFoundViaAlbum &&
+            joinLayout.GetRecNo(joinToArtist_idSongGenreSong) > -1 &&
+            !record->at(joinLayout.GetRecNo(joinToArtist_idSongGenreSong)).get_isNull() &&
+            genreId != record->at(joinLayout.GetRecNo(joinToArtist_idSongGenreSong)).get_asInt())
+          {
+            bArtDone = bArtDone || (genreId > 0);  // Not first genre, skip art repeats
+            newgenre = idRoleRow <= 1; // Skip other roles (when fetching them)
+            genreId = record->at(joinLayout.GetRecNo(joinToArtist_idSongGenreSong)).get_asInt();
+            strGenre = record->at(joinLayout.GetRecNo(joinToArtist_strSongGenreSong)).get_asString();
+          }
+          bool found(false);
+          if (newgenre)
+          {
+            // Already have that genre? 
+            for (const auto& i : genreidlist)
+              if (i == genreId)
+              {
+                found = true;
+                break;
+              }
+            if (!found)
+            {
+              bGenreFoundViaAlbum = bGenreFoundViaAlbum || bAlbumArtistRow;
+              genreidlist.emplace_back(genreId);
+              CVariant genreObj;
+              genreObj["genreid"] = genreId;
+              genreObj["title"] = strGenre;
+              artistObj["songgenres"].append(genreObj);
+            }
+          }
+        }
+        // Roles - gathered via song_artist roleid rows 
+        if (joinLayout.GetFetch(joinToArtist_idRole))
+        {
+          if (!bAlbumArtistRow && roleId != idRoleRow)
+          {
+            bArtDone = bArtDone || (roleId > 0);  // Not first role, skip art repeats
+            roleId = idRoleRow;
+            if (joinLayout.GetOutput(joinToArtist_strRole))
+            {
+              // Already have that role? 
+              bool found(false);
+              for (const auto& i : roleidlist)
+                if (i == roleId)
+                {
+                  found = true;
+                  break;
+                }
+              if (!found)
+              {
+                roleidlist.emplace_back(roleId);
+                CVariant roleObj;
+                roleObj["roleid"] = roleId;
+                roleObj["role"] = record->at(joinLayout.GetRecNo(joinToArtist_strRole)).get_asString();
+                artistObj["roles"].append(roleObj);
+              }
+            }
+          }
+        }
+      }
+      // Art
+      if (bJoinArt && !bArtDone && !record->at(joinLayout.GetRecNo(joinToArtist_idArt)).get_isNull())
+      {
+        if (artId != record->at(joinLayout.GetRecNo(joinToArtist_idArt)).get_asInt())
+        {
+          artId = record->at(joinLayout.GetRecNo(joinToArtist_idArt)).get_asInt();
+          if (joinLayout.GetOutput(joinToArtist_idArt))
+          {
+            artistObj["art"][record->at(joinLayout.GetRecNo(joinToArtist_artType)).get_asString()] =
+              CTextureUtils::GetWrappedImageURL(record->at(joinLayout.GetRecNo(joinToArtist_artURL)).get_asString());
+          }
+          if (joinLayout.GetOutput(joinToArtist_thumbnail) &&
+            record->at(joinLayout.GetRecNo(joinToArtist_artType)).get_asString() == "thumb")
+          {
+            artistObj["thumbnail"] = CTextureUtils::GetWrappedImageURL(record->at(joinLayout.GetRecNo(joinToArtist_artURL)).get_asString());
+          }
+          if (joinLayout.GetOutput(joinToArtist_fanart) &&
+            record->at(joinLayout.GetRecNo(joinToArtist_artType)).get_asString() == "fanart")
+          {
+            artistObj["fanart"] = CTextureUtils::GetWrappedImageURL(record->at(joinLayout.GetRecNo(joinToArtist_artURL)).get_asString());
+          }
+        }
+      }
+
+      m_pDS->next();
+    }
+
+    m_pDS->close(); // cleanup recordset data
+    return true;
+  }
+  catch (...)
+  {
+    m_pDS->close();
+    CLog::Log(LOGERROR, "%s failed", __FUNCTION__);
+  }
+  return false;
+}
+
 static const translateJSONField JSONtoDBAlbum[] = {
   // Table and single value join fields
   { "title",                     "string", true,  "strAlbum",               "" },
@@ -7281,7 +7944,7 @@ bool CMusicDatabase::GetSourcesByArtist(int idArtist, CFileItem* item)
       strSQL = PrepareSQL("SELECT DISTINCT album_source.idSource, FROM song_artist "
         "JOIN song ON song_artist.idSong = song.idSong "
         "JOIN album_source ON album_source.idAlbum = song.idAlbum "
-        "WHERE song_artist.idArtist = %i AND song_artist.iRole = 1 "
+        "WHERE song_artist.idArtist = %i AND song_artist.idRole = 1 "
         "ORDER BY album_source.idSource", idArtist);
       if (!m_pDS->query(strSQL))
         return false;
