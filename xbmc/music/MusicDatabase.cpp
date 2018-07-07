@@ -4771,8 +4771,9 @@ static const translateJSONField JSONtoDBArtist[] = {
   { "type",                      "string", true,  "strType",                "" },
   { "gender",                    "string", true,  "strGender",              "" },
   { "disambiguation",            "string", true,  "strDisambiguation",      "" },
-  { "musicbrainzartistid",       "string", true,  "strMusicBrainzArtistId", "" }, // Array in schema, but only ever one element
-                                                                                  // Scalar subquery fields
+  { "musicbrainzartistid",        "array", true,  "strMusicBrainzArtistId", "" }, // Array in schema, but only ever one element
+
+  // Scalar subquery fields
   { "dateadded",                 "string", true,  "dateAdded",              "(SELECT MAX(song.dateAdded) FROM song_artist JOIN song ON song.idSong = song_artist.idSong WHERE song_artist.idArtist = artist.idArtist) AS dateAdded" },
 
   // JOIN fields (multivalue), same order as _JoinToArtistFields
@@ -5169,18 +5170,13 @@ bool CMusicDatabase::GetArtistsByWhereJSON(const std::set<std::string>& fields, 
 
       if (m_pDS->eof() || artistId != record->at(0).get_asInt())
       {
-        // Store previous or last song
+        // Store previous or last artist
         if (bHaveArtist)
         {
-          // Convert the MBid sting entry into an array of at most one element (schema flaw)
-          if (artistObj.isMember("musicbrainzartistid"))
-          {
-            std::string mbid = artistObj["musicbrainzartistid"].asString();
-            artistObj["musicbrainzartistid"].clear();
-            artistObj["musicbrainzartistid"] = CVariant(CVariant::VariantTypeArray);
-            if (!mbid.empty())
-              artistObj["musicbrainzartistid"].append(mbid);
-          }
+          // Convert any empty MBid array into an array with one empty element [""]
+          // to match the number of artist ID (way other mbid arrays handled)
+          if (artistObj.isMember("musicbrainzartistid") && artistObj["musicbrainzartistid"].empty())
+            artistObj["musicbrainzartistid"].append("");
 
           result["artists"].append(artistObj);
           bHaveArtist = false;
@@ -5214,13 +5210,12 @@ bool CMusicDatabase::GetArtistsByWhereJSON(const std::set<std::string>& fields, 
         if (m_pDS->eof())
           continue;  // Having saved the last artist stop
 
-                     // New artist
+        // New artist
         artistId = record->at(0).get_asInt();
         bHaveArtist = true;
         artistObj["artistid"] = artistId;
         artistObj["label"] = record->at(1).get_asString();
         artistObj["artist"] = record->at(1).get_asString(); // Always have "artist"
-        artistObj["type"] = MediaTypeArtist;
         bIsAlbumArtist = bJoinAlbumArtist;  //Album artist by default
         if (bJoinSongArtist)
         {
@@ -5758,7 +5753,8 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
             else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "float")
               albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = std::max(record->at(2 + i).get_asFloat(), 0.f);
             else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "array")
-              albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = StringUtils::Split(record->at(2 + i).get_asString(), g_advancedSettings.m_musicItemSeparator);
+              albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = StringUtils::Split(record->at(2 + i).get_asString(),
+                g_advancedSettings.m_musicItemSeparator);
             else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "boolean")
               albumObj[JSONtoDBAlbum[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asBool();
             else if (JSONtoDBAlbum[dbfieldindex[i]].formatJSON == "image")
@@ -5782,7 +5778,8 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
             albumObj["artistid"].append(artistId);
           if (joinLayout.GetOutput(joinToAlbum_strArtist))
             albumObj["artist"].append(record->at(joinLayout.GetRecNo(joinToAlbum_strArtist)).get_asString());
-          if (joinLayout.GetOutput(joinToAlbum_strArtistMBID))
+          if (joinLayout.GetOutput(joinToAlbum_strArtistMBID) && 
+             !record->at(joinLayout.GetRecNo(joinToAlbum_strArtistMBID)).get_asString().empty())
             albumObj["musicbrainzalbumartistid"].append(record->at(joinLayout.GetRecNo(joinToAlbum_strArtistMBID)).get_asString());
         }        
       }
@@ -5810,7 +5807,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
 
 static const translateJSONField JSONtoDBSong[] = {
   // table and single value join fields
-  { "albumid",                   "string", true,  "song.idAlbum",           "" },
+  { "albumid",                  "integer", true,  "song.idAlbum",           "" },
   { "title",                     "string", true,  "strTitle",               "" },
   { "displayartist",             "string", true,  "song.strArtistDisp",     "" },
   { "sortartist",                "string", true,  "song.strArtistSort",     "" },
@@ -5824,10 +5821,10 @@ static const translateJSONField JSONtoDBSong[] = {
   { "lastplayed",                "string", true,  "lastPlayed",             "" },
   { "rating",                     "float", true,  "rating",                 "" },
   { "votes",                    "integer", true,  "votes",                  "" },
-  { "userrating",               "integer", true,  "song.userrating",        "" },
-  { "mood",                      "string", true,  "mood",                   "" },
+  { "userrating",              "unsigned", true,  "song.userrating",        "" },
+  { "mood",                       "array", true,  "mood",                   "" },
   { "dateadded",                 "string", true,  "dateAdded",              "" },
-  { "file",                      "string", true,  "strPathFile",            "path.strPath || strFilename AS strPathFile" }, // More complex concat really needed??
+  { "file",                      "string", true,  "strPathFile",            "path.strPath || strFilename AS strPathFile" }, 
   { "",                          "string", true,  "strPath",                "path.strPath AS strPath" },
   { "album",                     "string", true,  "strAlbum",               "album.strAlbum AS strAlbum" },
   { "albumreleasetype",          "string", true,  "strAlbumReleaseType",    "album.strReleaseType AS strAlbumReleaseType" },
@@ -5835,7 +5832,7 @@ static const translateJSONField JSONtoDBSong[] = {
 
   // JOIN fields (multivalue), same order as _JoinToSongFields 
   { "albumartistid",              "array", false, "idAlbumArtist",          "album_artist.idArtist AS idAlbumArtist" },
-  { "albumartist",                "array", false, "strAlbumArtist",         "album_artist.strArtist AS strAlbumArtist" },
+  { "albumartist",                "array", false, "strAlbumArtist",         "albumartist.strArtist AS strAlbumArtist" },
   { "musicbrainzalbumartistid",   "array", false, "strAlbumArtistMBID",     "albumartist.strMusicBrainzArtistID AS strAlbumArtistMBID" },
   { "",                                "", false, "iOrderAlbumArtist",      "album_artist.iOrder AS iOrderAlbumArtist" },
   { "artistid",                   "array", false, "idArtist",               "song_artist.idArtist AS idArtist" },
@@ -6090,8 +6087,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     if (joinLayout.GetFetch(joinToSongs_idAlbumArtist) ||
         joinLayout.GetFetch(joinToSongs_strAlbumArtist) ||
         joinLayout.GetFetch(joinToSongs_strAlbumArtistMBID))
-    {  // album_artist (has artist name as well)
-       // All songs have at least one album artist so inner join sufficient
+    { // All songs have at least one album artist so inner join sufficient
       bJoinAlbumArtist = true;
       joinFilter.AppendJoin("JOIN album_artist ON album_artist.idAlbum = sv.idAlbum");
       joinFilter.AppendGroup("album_artist.idArtist");
@@ -6108,8 +6104,9 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
         extFilter.AppendField("song.idAlbum"); //Prefer lookup JSONtoDBSong[XXX].dbField);
         dbfieldindex.emplace_back(-1);
       }
-      // artist join only needed for MBID
-      if (joinLayout.GetFetch(joinToSongs_strAlbumArtistMBID))
+      // artist table needed for strArtist or MBID 
+      // (album_artist.strArtist can be an alias or spelling variation) 
+      if (joinLayout.GetFetch(joinToSongs_strAlbumArtistMBID) || joinLayout.GetFetch(joinToSongs_strAlbumArtist))
         joinFilter.AppendJoin("JOIN artist AS albumartist ON albumartist.idArtist = album_artist.idArtist");
     }
 
@@ -6153,7 +6150,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
           joinFilter.AppendJoin("JOIN song_artist ON song_artist.idSong = sv.idSong");
           joinFilter.AppendJoin("JOIN role ON song_artist.idRole = role.idRole");
           joinFilter.AppendGroup("song_artist.idArtist, song_artist.idRole");
-          joinFilter.AppendOrder("song_artist.idRole, song_artist.iOrder");
+          joinFilter.AppendOrder("song_artist.idRole, song_artist.iOrder, song_artist.idArtist");
         }
         else
         { // Get just roles for  "displaycomposer", "displayconductor" etc.
@@ -6172,7 +6169,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
           where = " (" + where + ")";
           joinFilter.AppendJoin("JOIN song_artist ON song_artist.idSong = sv.idSong AND " + where);
           joinFilter.AppendGroup("song_artist.idArtist, song_artist.idRole");
-          joinFilter.AppendOrder("song_artist.idRole, song_artist.iOrder");
+          joinFilter.AppendOrder("song_artist.idRole, song_artist.iOrder, song_artist.idArtist");
         }
       }
       // Ensure idArtist is queried for processing repeats
@@ -6187,12 +6184,12 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     }    
 
     // Genre ids
-    if (joinLayout.GetRecNo(joinToSongs_idGenre) > -1)
+    if (joinLayout.GetFetch(joinToSongs_idGenre))
     { // song genre ids (strGenre demormalised in song table)
       // Left join as songs may not have genre      
       joinFilter.AppendJoin("LEFT JOIN song_genre ON song_genre.idSong = sv.idSong");
       joinFilter.AppendGroup("song_genre.idGenre");
-      joinFilter.AppendOrder("sv.idSong, song_genre.iOrder");
+      joinFilter.AppendOrder("song_genre.iOrder");
     }
 
     // Build JOIN part of query (if we have one)
@@ -6247,15 +6244,16 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     bool bSongGenreDone(false);
     bool bSongArtistDone(false);
     bool bAlbumArtistDone(false);
+    bool bHaveSong(false);
     CVariant songObj;
-    while (!m_pDS->eof() || !songObj.empty())
+    while (!m_pDS->eof() || bHaveSong)
     {
       const dbiplus::sql_record* const record = m_pDS->get_sql_record();
 
       if (m_pDS->eof() || songId != record->at(0).get_asInt())
       {
         // Store previous or last song
-        if (!songObj.empty())
+        if (bHaveSong)
         {
           // Check empty role fields get returned, and format
           for (const auto& displayXXX : rolefieldlist)
@@ -6281,13 +6279,17 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
             else
               songObj[displayXXX] = "";
           }
-          // Ensure songs with null genreid gets empty array
-          if (joinLayout.GetOutput(joinToSongs_idGenre) && !songObj.isMember("genreid"))
-            songObj["genreid"] = CVariant(CVariant::VariantTypeArray);
 
           result["songs"].append(songObj);
-
+          bHaveSong = false;
           songObj.clear();
+        }
+        if (songObj.empty())
+        {
+          // Initialise fields, ensure those with possible null values are set to correct empty variant type
+          if (joinLayout.GetOutput(joinToSongs_idGenre))
+            songObj["genreid"] = CVariant(CVariant::VariantTypeArray); //"genre" set [] by split of array
+
           albumartistId = -1;
           artistId = -1;
           roleId = -1;
@@ -6300,16 +6302,18 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
 
         // New song
         songId = record->at(0).get_asInt();
+        bHaveSong = true;
         songObj["songid"] = songId;
         songObj["label"] = record->at(1).get_asString();
-        songObj["type"] = MediaTypeSong;
         for (size_t i = 0; i < dbfieldindex.size(); i++)
           if (dbfieldindex[i] > -1)
           {
             if (JSONtoDBSong[dbfieldindex[i]].formatJSON == "integer")
               songObj[JSONtoDBSong[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asInt();
+            else if (JSONtoDBSong[dbfieldindex[i]].formatJSON == "unsigned")
+              songObj[JSONtoDBSong[dbfieldindex[i]].fieldJSON] = std::max(record->at(2 + i).get_asInt(), 0);
             else if (JSONtoDBSong[dbfieldindex[i]].formatJSON == "float")
-              songObj[JSONtoDBSong[dbfieldindex[i]].fieldJSON] = record->at(2 + i).get_asFloat();
+              songObj[JSONtoDBSong[dbfieldindex[i]].fieldJSON] = std::max(record->at(2 + i).get_asFloat(), 0.f);
             else if (JSONtoDBSong[dbfieldindex[i]].formatJSON == "array")
               songObj[JSONtoDBSong[dbfieldindex[i]].fieldJSON] = StringUtils::Split(record->at(2 + i).get_asString(), g_advancedSettings.m_musicItemSeparator);
             else if (JSONtoDBSong[dbfieldindex[i]].formatJSON == "boolean")
@@ -6348,6 +6352,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
         if (artistId != record->at(joinLayout.GetRecNo(joinToSongs_idArtist)).get_asInt())
         {
           bSongGenreDone = bSongGenreDone || (artistId > 0);  // Not first artist, skip genre
+          roleId = -1; // Allow for many artists same role
           artistId = record->at(joinLayout.GetRecNo(joinToSongs_idArtist)).get_asInt();
           if (joinLayout.GetRecNo(joinToSongs_idRole) < 0 ||
               record->at(joinLayout.GetRecNo(joinToSongs_idRole)).get_asInt() == 1)
