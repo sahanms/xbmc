@@ -67,8 +67,8 @@ public:
       strField()
     { }
 
-    bool output;
     bool fetch;
+    bool output;
     int recno;
     std::string strField;
   } DatasetFieldInfo;

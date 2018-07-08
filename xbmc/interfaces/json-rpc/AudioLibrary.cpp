@@ -83,30 +83,29 @@ JSONRPC_STATUS CAudioLibrary::GetArtists(const std::string &method, ITransportLa
   if (parameterObject["allroles"].isBoolean())
     allroles = parameterObject["allroles"].asBoolean();
 
-  int genreID = -1, albumID = -1, songID = -1;
   const CVariant &filter = parameterObject["filter"];
 
   if (allroles)
     musicUrl.AddOption("roleid", -1000); //All roles, any negative parameter overrides implicit roleid=1 filter required for backward compatibility
   else if (filter.isMember("roleid"))
-    musicUrl.AddOption("roleid", (int)filter["roleid"].asInteger());
+    musicUrl.AddOption("roleid", static_cast<int>(filter["roleid"].asInteger()));
   else if (filter.isMember("role"))
     musicUrl.AddOption("role", filter["role"].asString());
   // Only one of (song) genreid/genre, albumid/album or songid/song or rules type filter is allowed by filter syntax
   if (filter.isMember("genreid"))  //Deprecated. Use "songgenre" or "artistgenre"
-    genreID = (int)filter["genreid"].asInteger();
+    musicUrl.AddOption("genreid", static_cast<int>(filter["genreid"].asInteger()));
   else if (filter.isMember("genre"))
     musicUrl.AddOption("genre", filter["genre"].asString());
   if (filter.isMember("songgenreid"))
-    genreID = (int)filter["songgenreid"].asInteger();
+    musicUrl.AddOption("genreid", static_cast<int>(filter["songgenreid"].asInteger()));
   else if (filter.isMember("songgenre"))
     musicUrl.AddOption("genre", filter["songgenre"].asString());
   else if (filter.isMember("albumid"))
-    albumID = (int)filter["albumid"].asInteger();
+    musicUrl.AddOption("albumid", static_cast<int>(filter["albumid"].asInteger()));
   else if (filter.isMember("album"))
     musicUrl.AddOption("album", filter["album"].asString());
   else if (filter.isMember("songid"))
-    songID = (int)filter["songid"].asInteger();
+    musicUrl.AddOption("songid", static_cast<int>(filter["songid"].asInteger()));
   else if (filter.isObject())
   {
     std::string xsp;
@@ -201,16 +200,16 @@ JSONRPC_STATUS CAudioLibrary::GetAlbums(const std::string &method, ITransportLay
   if (allroles)
     musicUrl.AddOption("roleid", -1000); //All roles, override implicit roleid=1 filter required for backward compatibility
   else if (filter.isMember("roleid"))
-    musicUrl.AddOption("roleid", (int)filter["roleid"].asInteger());
+    musicUrl.AddOption("roleid", static_cast<int>(filter["roleid"].asInteger()));
   else if (filter.isMember("role"))
     musicUrl.AddOption("role", filter["role"].asString());
   // Only one of genreid/genre, artistid/artist or rules type filter is allowed by filter syntax
   if (filter.isMember("artistid"))
-    musicUrl.AddOption("artistid", (int)filter["artistid"].asInteger());
+    musicUrl.AddOption("artistid", static_cast<int>(filter["artistid"].asInteger()));
   else if (filter.isMember("artist"))
     musicUrl.AddOption("artist", filter["artist"].asString());
   else if (filter.isMember("genreid"))
-    musicUrl.AddOption("genreid", (int)filter["genreid"].asInteger());
+    musicUrl.AddOption("genreid", static_cast<int>(filter["genreid"].asInteger()));
   else if (filter.isMember("genre"))
     musicUrl.AddOption("genre", filter["genre"].asString());
   else if (filter.isObject())
@@ -348,20 +347,20 @@ JSONRPC_STATUS CAudioLibrary::GetSongs(const std::string &method, ITransportLaye
   if (allroles)
     musicUrl.AddOption("roleid", -1000); //All roles, override implicit roleid=1 filter required for backward compatibility
   else if (filter.isMember("roleid"))
-    musicUrl.AddOption("roleid", (int)filter["roleid"].asInteger());
+    musicUrl.AddOption("roleid", static_cast<int>(filter["roleid"].asInteger()));
   else if (filter.isMember("role"))
     musicUrl.AddOption("role", filter["role"].asString());
   // Only one of genreid/genre, artistid/artist, albumid/album or rules type filter is allowed by filter syntax
   if (filter.isMember("artistid"))
-    musicUrl.AddOption("artistid", (int)filter["artistid"].asInteger());
+    musicUrl.AddOption("artistid", static_cast<int>(filter["artistid"].asInteger()));
   else if (filter.isMember("artist"))
     musicUrl.AddOption("artist", filter["artist"].asString());
   else if (filter.isMember("genreid"))
-    musicUrl.AddOption("genreid", (int)filter["genreid"].asInteger());
+    musicUrl.AddOption("genreid", static_cast<int>(filter["genreid"].asInteger()));
   else if (filter.isMember("genre"))
     musicUrl.AddOption("genre", filter["genre"].asString());
   else if (filter.isMember("albumid"))
-    musicUrl.AddOption("albumid", (int)filter["albumid"].asInteger());
+    musicUrl.AddOption("albumid", static_cast<int>(filter["albumid"].asInteger()));
   else if (filter.isMember("album"))
     musicUrl.AddOption("album", filter["album"].asString());
   else if (filter.isObject())

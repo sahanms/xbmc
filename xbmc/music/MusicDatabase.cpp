@@ -5039,9 +5039,9 @@ bool CMusicDatabase::GetArtistsByWhereJSON(const std::set<std::string>& fields, 
       // so filter dataset rows likewise. 
       songArtistFilter.AppendWhere("song_artist.idRole = 1");
     else if (joinLayout.GetFetch(joinToArtist_strRole) ||  // "roles" field
-      bJoinSongArtist &&
-      (joinLayout.GetFetch(joinToArtist_idSourceAlbum) ||
-        joinLayout.GetFetch(joinToArtist_idSongGenreAlbum)))
+             (bJoinSongArtist &&
+             (joinLayout.GetFetch(joinToArtist_idSourceAlbum) ||
+             joinLayout.GetFetch(joinToArtist_idSongGenreAlbum))))
     { // Rows from many roles so fetch roleid for "roles", source and genre processing
       songArtistFilter.AppendField(JSONtoDBArtist[index_firstjoin + joinToArtist_idRole].SQL);
       songArtistFilter.AppendGroup(JSONtoDBArtist[index_firstjoin + joinToArtist_idRole].SQL);
@@ -5703,7 +5703,6 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
     // Get albums from returned rows. Joins means there can be many rows per album
     int albumId = -1;
     int artistId = -1;
-    int genreid = -1;
     bool bSongGenreDone(false);
     CVariant albumObj;
     while (!m_pDS->eof() || !albumObj.empty())
@@ -5725,14 +5724,13 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
             std::vector<std::string> sources = StringUtils::Split(albumObj["sourceid"].asString(), ";");
             albumObj["sourceid"] = CVariant(CVariant::VariantTypeArray);
             for (size_t i = 0; i < sources.size(); i++)
-              albumObj["sourceid"].append(atol(sources[i].c_str()));
+              albumObj["sourceid"].append(atoi(sources[i].c_str()));
           }
 
           result["albums"].append(albumObj);
 
           albumObj.clear();          
           artistId = -1;
-          genreid = -1;
           bSongGenreDone = false;
         }
         if (m_pDS->eof())
@@ -6243,7 +6241,6 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     int roleId = -1;
     bool bSongGenreDone(false);
     bool bSongArtistDone(false);
-    bool bAlbumArtistDone(false);
     bool bHaveSong(false);
     CVariant songObj;
     while (!m_pDS->eof() || bHaveSong)
@@ -6295,7 +6292,6 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
           roleId = -1;
           bSongGenreDone = false;
           bSongArtistDone = false;
-          bAlbumArtistDone = false;
         }
         if (m_pDS->eof())
           continue;  // Having saved the last song stop
@@ -6328,7 +6324,7 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
           std::vector<std::string> sources = StringUtils::Split(songObj["sourceid"].asString(), ";");
           songObj["sourceid"] = CVariant(CVariant::VariantTypeArray);
           for (size_t i = 0; i < sources.size(); i++)
-            songObj["sourceid"].append(atol(sources[i].c_str()));
+            songObj["sourceid"].append(atoi(sources[i].c_str()));
         }
       }
 

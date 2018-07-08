@@ -161,7 +161,7 @@ CDatabase::DatasetLayout::DatasetLayout(size_t totalfields)
 
 void CDatabase::DatasetLayout::SetField(int fieldNo, const std::string &strField, bool bOutput /*= false*/)
 {  
-  if (fieldNo >= 0 && fieldNo < fields.size())
+  if (fieldNo >= 0 && fieldNo < static_cast<int>(fields.size()))
   {
     fields[fieldNo].strField = strField;
     fields[fieldNo].fetch = true;
@@ -184,21 +184,21 @@ void CDatabase::DatasetLayout::AdjustRecordNumbers(int offset)
 
 bool CDatabase::DatasetLayout::GetFetch(int fieldno)
 {
-  if (fieldno >= 0 && fieldno < fields.size())
+  if (fieldno >= 0 && fieldno < static_cast<int>(fields.size()))
     return fields[fieldno].fetch;
   return false;
 }
 
 bool CDatabase::DatasetLayout::GetOutput(int fieldno)
 {
-  if (fieldno >= 0 && fieldno < fields.size())
+  if (fieldno >= 0 && fieldno < static_cast<int>(fields.size()))
     return fields[fieldno].output;
   return false;
 }
 
 int CDatabase::DatasetLayout::GetRecNo(int fieldno)
 {
-  if (fieldno >= 0 && fieldno < fields.size())
+  if (fieldno >= 0 && fieldno < static_cast<int>(fields.size()))
     return fields[fieldno].recno;
   return -1;
 }
