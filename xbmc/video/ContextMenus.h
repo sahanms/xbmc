@@ -72,11 +72,4 @@ struct CResume : IContextMenuItem
   bool IsVisible(const CFileItem& item) const override;
   bool Execute(const CFileItemPtr& _item) const override;
 };
-
-struct CPlay : IContextMenuItem
-{
-  std::string GetLabel(const CFileItem& item) const override;
-  bool IsVisible(const CFileItem& item) const override;
-  bool Execute(const CFileItemPtr& _item) const override;
-};
 }

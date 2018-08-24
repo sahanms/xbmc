@@ -727,11 +727,16 @@ void CGUIWindowMusicBase::OnRipTrack(int iItem)
 
 void CGUIWindowMusicBase::PlayItem(int iItem)
 {
+  const CFileItemPtr pItem = m_vecItems->Get(iItem);
+  Play(pItem);
+}
+
+void CGUIWindowMusicBase::Play(const CFileItemPtr& pItem)
+{
   // restrictions should be placed in the appropriate window code
   // only call the base code if the item passes since this clears
   // the current playlist
 
-  const CFileItemPtr pItem = m_vecItems->Get(iItem);
 #ifdef HAS_DVD_DRIVE
   if (pItem->IsDVD())
   {
@@ -744,7 +749,7 @@ void CGUIWindowMusicBase::PlayItem(int iItem)
   if (pItem->m_bIsFolder && !pItem->IsPlugin())
   {
     // make a copy so that we can alter the queue state
-    CFileItemPtr item(new CFileItem(*m_vecItems->Get(iItem)));
+    CFileItemPtr item(new CFileItem(*pItem));
 
     //  Allow queuing of unqueueable items
     //  when we try to queue them directly
@@ -784,8 +789,11 @@ void CGUIWindowMusicBase::PlayItem(int iItem)
   else
   {
     // just a single item, play it
-    //! @todo Add music-specific code for single playback of an item here (See OnClick in MediaWindow, and OnPlayMedia below)
-    OnClick(iItem);
+    bool autoplay = m_guiState.get() && m_guiState->AutoPlayNextItem();
+    if (autoplay && !g_partyModeManager.IsEnabled())
+      OnPlayAndQueueMedia(pItem, "");
+    else 
+      g_application.PlayFile(*pItem, "");
   }
 }
 

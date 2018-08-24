@@ -146,37 +146,4 @@ bool CResume::Execute(const CFileItemPtr& itemIn) const
   return true;
 };
 
-std::string CPlay::GetLabel(const CFileItem& itemIn) const
-{
-  CFileItem item(itemIn.GetItemToPlay());
-  if (item.IsLiveTV())
-    return g_localizeStrings.Get(19000); // Switch to channel
-  if (CGUIWindowVideoBase::HasResumeItemOffset(&item))
-    return g_localizeStrings.Get(12021); // Play from beginning
-  return g_localizeStrings.Get(208); // Play
-}
-
-bool CPlay::IsVisible(const CFileItem& itemIn) const
-{
-  CFileItem item(itemIn.GetItemToPlay());
-  if (item.IsDeleted()) // e.g. trashed pvr recording
-    return false;
-
-  if (item.m_bIsFolder)
-    return false; //! @todo implement
-
-  return item.IsVideo() || item.IsLiveTV() || item.IsDVD() || item.IsCDDA();
-}
-
-bool CPlay::Execute(const CFileItemPtr& itemIn) const
-{
-  CFileItem item(itemIn->GetItemToPlay());
-#ifdef HAS_DVD_DRIVE
-  if (item.IsDVD() || item.IsCDDA())
-    return MEDIA_DETECT::CAutorun::PlayDisc(item.GetPath(), true, true);
-#endif
-  SetPathAndPlay(item);
-  return true;
-};
-
 }

@@ -48,6 +48,7 @@ public:
   */
   static void OnAssignContent(const std::string& oldName, const CMediaSource& source);
 
+  void Play(const CFileItemPtr& pItem);
 protected:
   void OnInitWindow() override;
   /*!
