@@ -225,7 +225,7 @@ JSONRPC_STATUS CAudioLibrary::GetAlbums(const std::string &method, ITransportLay
   {
     for (CVariant::const_iterator_array field = parameterObject["properties"].begin_array();
     field != parameterObject["properties"].end_array(); field++)
-    fields.insert(field->asString());
+      fields.insert(field->asString());
   }
 
   if (!musicdatabase.GetAlbumsByWhereJSON(fields, musicUrl.ToString(), result, total, sorting))
