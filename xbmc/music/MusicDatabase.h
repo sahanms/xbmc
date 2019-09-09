@@ -288,6 +288,7 @@ public:
   int  GetAlbumByName(const std::string& strAlbum, const std::vector<std::string>& artist);
   int  GetAlbumByMatch(const CAlbum &album);
   std::string GetAlbumById(int id);
+  int GetAlbumDiscCount(int idAlbum);
   bool SetAlbumUserrating(const int idAlbum, int userrating);
 
 
@@ -431,11 +432,9 @@ public:
   ////////////////////////////////////////////////
   // Boxsets
   ////////////////////////////////////////////////
-  bool GetBoxsetsAlbums(const std::string& strBaseDir, CFileItemList& items);
   bool GetBoxsetDiscs(const std::string& strBaseDir, CFileItemList& items, int idAlbum = -1, const SortDescription &sortDescription = SortDescription());
-  bool GetBoxsetDiscSongs(const std::string& strBaseDir, CFileItemList& items);
+  std::string GetBoxsetDiscById(int idAlbum, int idDisc);
   int  GetBoxsetsCount();
-  bool RemoveBoxset(int albumId);
 ////////////////////////////////////////////////
 
   int GetArtistCountForRole(int role);

@@ -206,9 +206,6 @@ bool CMusicDatabaseDirectory::GetLabel(const std::string& strDirectory, std::str
     case NODE_TYPE_ALBUM_COMPILATIONS_SONGS:
       strLabel = g_localizeStrings.Get(521);
       break;
-    case NODE_TYPE_BOXSETS:
-      strLabel = g_localizeStrings.Get(38074); // box-sets
-      break;
     case NODE_TYPE_OVERVIEW:
       strLabel = "";
       break;
@@ -230,7 +227,6 @@ bool CMusicDatabaseDirectory::ContainsSongs(const std::string &path)
   if (type == MUSICDATABASEDIRECTORY::NODE_TYPE_ALBUM_TOP100_SONGS) return true;
   if (type == MUSICDATABASEDIRECTORY::NODE_TYPE_SONG_TOP100) return true;
   if (type == MUSICDATABASEDIRECTORY::NODE_TYPE_YEAR_SONG) return true;
-  if (type == MUSICDATABASEDIRECTORY::NODE_TYPE_BOXSET_DISC_SONGS) return true;
   return false;
 }
 
@@ -292,8 +288,6 @@ std::string CMusicDatabaseDirectory::GetIcon(const std::string &strDirectory)
     return "DefaultMusicTop100Songs.png";
   case NODE_TYPE_YEAR:
     return "DefaultMusicYears.png";
-  case NODE_TYPE_BOXSETS:
-    return "DefaultSets.png";
   case NODE_TYPE_ALBUM_COMPILATIONS:
     return "DefaultMusicCompilations.png";
   default:

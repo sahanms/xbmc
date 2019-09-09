@@ -2192,7 +2192,6 @@ msgctxt "#470"
 msgid "Credits"
 msgstr ""
 
-
 #empty strings from id 471 to 473
 
 msgctxt "#474"
@@ -2390,7 +2389,7 @@ msgctxt "#519"
 msgid "Launch in..."
 msgstr ""
 
-#: empty string 520
+#empty string with id 520
 
 #: xbmc/filesystem/MusicDatabaseDirectory/DirectoryNodeOverview.cpp
 msgctxt "#521"
@@ -7787,6 +7786,7 @@ msgctxt "#14086"
 msgid "Playback"
 msgstr ""
 
+#: xbmc/filesystem/MusicDatabaseDirectory/DirectoryNodeOverview.cpp
 #: system/settings/settings.xml
 msgctxt "#14087"
 msgid "Discs"
@@ -8400,12 +8400,14 @@ msgstr ""
 #: xbmc/filesystem/MusicDatabaseDirectory/DirectoryNodeRcentlyAdded.cpp
 #: xbmc/filesystem/MusicDatabaseDirectory/DirectoryNodeRcentlyPlayed.cpp
 #: xbmc/filesystem/MusicDatabaseDirectory/DirectoryNodeYearAlbum.cpp
+#: xbmc/music/windows/MusicFileItemListModifier.cpp
 msgctxt "#15102"
 msgid "* All albums"
 msgstr ""
 
 #: xbmc/filesystem/MusicDatabaseDirectory/DirectoryNode.cpp
 #: xbmc/filesystem/MusicDatabaseDirectory/DirectoryNodeArtist.cpp
+#: xbmc/music/windows/MusicFileItemListModifier.cpp
 msgctxt "#15103"
 msgid "* All artists"
 msgstr ""
@@ -12775,8 +12777,7 @@ msgctxt "#20340"
 msgid "Do you want to remove all items within this path from your library?"
 msgstr ""
 
-#: empty string #20341
-
+#empty string with id #20341
 
 #: xbmc/dialogs/GUIDialogMediaFilter.cpp
 #: xbmc/dialogs/GUIDialogSmartPlaylistEditor.cpp
@@ -21157,12 +21158,19 @@ msgctxt "#38073"
 msgid "Do you want to refresh information for this item now?"
 msgstr ""
 
+#: system/library/music/musicroles/boxsets.xml
 msgctxt "#38074"
 msgid "Box-sets"
 msgstr ""
 
-#empty strings from id 38075 to 38099
-#strings 38075 to 38099 reserved for music library
+#: xbmc/music/windows/MusicFileItemListModifier.cpp
+#: xbmc/filesystem/MusicDatabaseDirectory/DirectoryNodeDisc.cpp
+msgctxt "#38075"
+msgid "* All discs"
+msgstr ""
+
+#empty strings from id 38076 to 38099
+#strings 38076 to 38099 reserved for music library
 
 #. Description of section #14200 "Player""
 #: system/settings/settings.xml
