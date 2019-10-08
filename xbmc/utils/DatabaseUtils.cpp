@@ -54,7 +54,8 @@ std::string DatabaseUtils::GetField(Field field, const MediaType &mediaType, Dat
     if (field == FieldId) return "albumview.idAlbum";
     else if (field == FieldAlbum) return "albumview.strAlbum";
     else if (field == FieldArtist || field == FieldAlbumArtist) return "albumview.strArtists";
-    else if (field == FieldGenre) return "albumview.strGenre";
+    else if (field == FieldGenre)
+      return "albumview.strGenres";
     else if (field == FieldYear) return "albumview.iYear";
     else if (field == FieldMoods) return "albumview.strMoods";
     else if (field == FieldStyles) return "albumview.strStyles";
@@ -92,7 +93,8 @@ std::string DatabaseUtils::GetField(Field field, const MediaType &mediaType, Dat
     else if (field == FieldAlbum) return "songview.strAlbum";
     else if (field == FieldPath) return "songview.strPath";
     else if (field == FieldArtist || field == FieldAlbumArtist) return "songview.strArtists";
-    else if (field == FieldGenre) return "songview.strGenre";
+    else if (field == FieldGenre)
+      return "songview.strGenres";
     else if (field == FieldDateAdded) return "songview.dateAdded";
     else if (field == FieldDiscTitle)
       return "songview.strDiscSubtitle";
@@ -451,8 +453,12 @@ bool DatabaseUtils::GetDatabaseResults(const MediaType &mediaType, const FieldLi
 
 std::string DatabaseUtils::BuildLimitClause(int end, int start /* = 0 */)
 {
+  return " LIMIT " + BuildLimitClauseOnly(end, start);
+}
+
+std::string DatabaseUtils::BuildLimitClauseOnly(int end, int start /* = 0 */)
+{
   std::ostringstream sql;
-  sql << " LIMIT ";
   if (start > 0)
   {
     if (end > 0)
