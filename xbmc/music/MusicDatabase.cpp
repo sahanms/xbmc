@@ -4925,7 +4925,7 @@ bool CMusicDatabase::GetSongsFullByWhere(const std::string &baseDir, const Filte
     if (!musicUrl.FromString(baseDir) || !GetFilter(musicUrl, extFilter, sorting))
       return false;
 
-    // If there are extra WHERE conditions (from media filter dialog) we might 
+    // If there are extra WHERE conditions (from media filter dialog) we might
     // need access to albumview for these conditions
     if (extFilter.where.find("albumview") != std::string::npos)
     {
@@ -5906,6 +5906,7 @@ bool CMusicDatabase::GetArtistsByWhereJSON(const std::set<std::string>& fields, 
   return false;
 }
 
+// clang format off
 static const translateJSONField JSONtoDBAlbum[] = {
   // albumview (inc scalar subquery fields use in filter rules)
   { "title",                     "string", true,  "strAlbum",               "" },  // Label field at top
@@ -5939,7 +5940,6 @@ static const translateJSONField JSONtoDBAlbum[] = {
   { "musicbrainzalbumartistid",   "array", false, "strArtistMBID",          "artist.strMusicBrainzArtistID AS strArtistMBID" },
   { "songgenres",                 "array", false, "idSongGenre",            "song_genre.idGenre AS idSongGenre" },
   { "",                                "", false, "strSongGenre",           "genre.strGenre AS strSongGenre" },
-  { "",                                "", true, "artistsortname",          "CASE WHEN strArtistSort IS NOT NULL THEN strArtistSort ELSE strArtists END AS artistsortname"}
   /*
    Album "fanart" and "art" fields of JSON schema are fetched using thumbloader
    and separate queries to allow for fallback strategy.
@@ -5952,6 +5952,7 @@ static const translateJSONField JSONtoDBAlbum[] = {
    only calculated (slowing query) when field is in field list.
   */
 };
+// clang format on
 
 static const size_t NUM_ALBUM_FIELDS = sizeof(JSONtoDBAlbum) / sizeof(translateJSONField);
 
@@ -5981,7 +5982,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
     if (!BuildSQL(strSQLExtra, extFilter, strSQLExtra))
       return false;
 
-    // Count number of albums that satisfy selection criteria 
+    // Count number of albums that satisfy selection criteria
     // (includes xsp limits from filter, but not sort limits)
     // Use albumview as filter rules in where clause may use scalar query fields
     total = static_cast<int>(strtol(GetSingleValue("SELECT COUNT(1) FROM albumview " + strSQLExtra, m_pDS).c_str(), nullptr, 10));
@@ -5989,10 +5990,10 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
     // Get order by (and any scalar query artist fields
     GetOrderFilter(MediaTypeAlbum, sortDescription, extFilter);
     
-    // Grab and adjust artist sort field that may have been added to filter
-    // This needs to be added in the expected position in the vector
-    std::string artistsortSQL = extFilter.fields;
-    extFilter.fields.clear(); 
+    // Grab calculated artist/title sort fields that may have been added to filter
+    // These need to be added to the end of the field list
+    std::string calcsortfieldsSQL = extFilter.fields;
+    extFilter.fields.clear();
 
     std::string strSQL;
 
@@ -6036,14 +6037,9 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
             dbfieldindex.emplace_back(-1);
           else
             dbfieldindex.emplace_back(i);
-          // Field from scaler subquery
           if (!JSONtoDBAlbum[i].SQL.empty())
-          { 
-            if (JSONtoDBAlbum[i].fieldDB == "artistsortname")
-              extFilter.AppendField(artistsortSQL);
-            else
-              extFilter.AppendField(PrepareSQL(JSONtoDBAlbum[i].SQL));
-          }
+            // Field from scaler subquery
+            extFilter.AppendField(PrepareSQL(JSONtoDBAlbum[i].SQL));
           else
             // Field from album table
             extFilter.AppendField(JSONtoDBAlbum[i].fieldDB);
@@ -6054,6 +6050,9 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
         }
       }
     }
+    // Append calculated artist/title sort fields that may have been added to filter
+    // Field used only for ORDER BY, not output to JSON
+    extFilter.AppendField(calcsortfieldsSQL);
 
     // JOIN art tables if needed (fields output and/or in sort)
     if (extFilter.fields.find("art.") != std::string::npos)
@@ -6274,6 +6273,7 @@ bool CMusicDatabase::GetAlbumsByWhereJSON(const std::set<std::string>& fields, c
   return false;
 }
 
+// clang format off
 static const translateJSONField JSONtoDBSong[] = {
   // table and single value join fields
   { "title",                     "string", true,  "strTitle",               "" }, // Label field at top
@@ -6325,7 +6325,6 @@ static const translateJSONField JSONtoDBSong[] = {
   { "track",                    "integer", true,  "track",                  "(iTrack & 0xffff) AS track" },
   { "disc",                     "integer", true,  "disc",                   "(iTrack >> 16) AS disc" },
   { "sourceid",                  "string", true,  "sourceid",               "(SELECT GROUP_CONCAT(album_source.idSource SEPARATOR '; ') FROM album_source WHERE album_source.idAlbum = song.idAlbum) AS sources" },
-  { "",                                "", true,  "artistsortname",         "CASE WHEN song.strArtistSort IS NOT NULL THEN song.strArtistSort ELSE song.strArtistDisp END AS artistsortname"}
   /* 
   Song "thumbnail", "fanart" and "art" fields of JSON schema are fetched using
   thumbloader and separate queries to allow for fallback strategy
@@ -6344,6 +6343,7 @@ static const translateJSONField JSONtoDBSong[] = {
 
   */
 };
+// clang format on
 
 static const size_t NUM_SONG_FIELDS = sizeof(JSONtoDBSong) / sizeof(translateJSONField);
 
@@ -6408,11 +6408,12 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
     StringUtils::Replace(extFilter.order, "songview", "song");
     StringUtils::Replace(extFilter.fields, " strArtistSort", " song.strArtistSort");
     StringUtils::Replace(extFilter.fields, "songview.strArtists", "song.strArtistDisp");
+    StringUtils::Replace(extFilter.fields, "songview.strAlbum", "strAlbum");
+    StringUtils::Replace(extFilter.fields, "songview.strTitle", "strTitle");
 
-
-    // Grab and adjust artist sort field that may have been added to filter
-    // This needs to be added in the expected position in the vector
-    std::string artistsortSQL = extFilter.fields;
+    // Grab calculated artist/title sort fields that may have been added to filter
+    // These need to be added to the end of the field list
+    std::string calcsortfieldsSQL = extFilter.fields;
     extFilter.fields.clear();
 
     std::string strSQL;
@@ -6458,14 +6459,9 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
             dbfieldindex.emplace_back(-1);
           else
             dbfieldindex.emplace_back(i);
-          // Field from scaler subquery
           if (!JSONtoDBSong[i].SQL.empty())
-          { 
-            if (JSONtoDBSong[i].fieldDB == "artistsortname")
-              extFilter.AppendField(artistsortSQL);
-            else
-              extFilter.AppendField(PrepareSQL(JSONtoDBSong[i].SQL));
-          }
+            // Field from scaler subquery
+            extFilter.AppendField(PrepareSQL(JSONtoDBSong[i].SQL));
           else
             // Field from song table
             extFilter.AppendField(JSONtoDBSong[i].fieldDB);
@@ -6483,6 +6479,10 @@ bool CMusicDatabase::GetSongsByWhereJSON(const std::set<std::string>& fields, co
         }
       }
     }
+    // Append calculated artist/title sort fields that may have been added to filter
+    // Field used only for ORDER BY, not output tp JSON
+    extFilter.AppendField(calcsortfieldsSQL);
+
     // Build matching list of role id for "displaycomposer", "displayconductor", 
     // "displayorchestra", "displaylyricist"
     for (const auto& name : rolefieldlist)
@@ -6939,7 +6939,10 @@ std::string CMusicDatabase::GetIgnoreArticleSQL(const std::string& strField)
   return sortclause;
 }
 
-std::string CMusicDatabase::SortnameBuildSQL(const std::string& strAlias, const SortAttribute& sortAttributes, const std::string& strField, const std::string& strSortField)
+std::string CMusicDatabase::SortnameBuildSQL(const std::string& strAlias,
+                                             const SortAttribute& sortAttributes,
+                                             const std::string& strField,
+                                             const std::string& strSortField)
 {
   /*
   Build SQL for sort name scalar subquery from sort attributes and ignore article list.
@@ -6951,23 +6954,24 @@ std::string CMusicDatabase::SortnameBuildSQL(const std::string& strAlias, const 
   END AS strAlias
   */
 
-  std::string artistsortSQL;
-  if (sortAttributes & SortAttributeUseArtistSortName)
-    artistsortSQL = PrepareSQL("WHEN %s IS NOT NULL THEN %s ", strSortField.c_str(), strSortField.c_str());
+  std::string sortSQL;
+  if (!strSortField.empty() && sortAttributes & SortAttributeUseArtistSortName)
+    sortSQL =
+        PrepareSQL("WHEN %s IS NOT NULL THEN %s ", strSortField.c_str(), strSortField.c_str());
   if (sortAttributes & SortAttributeIgnoreArticle)
   {
-    if (!artistsortSQL.empty())
-      artistsortSQL += " ";
+    if (!sortSQL.empty())
+      sortSQL += " ";
     // Make SQL from ignore article list, grouping tokens the same length together
-    artistsortSQL += GetIgnoreArticleSQL(strField);
+    sortSQL += GetIgnoreArticleSQL(strField);
   }
-  if (!artistsortSQL.empty())
+  if (!sortSQL.empty())
   {
-    artistsortSQL = "CASE " + artistsortSQL;  // Not prepare as may contain ' and % etc.
-    artistsortSQL += PrepareSQL(" ELSE %s END AS %s", strField.c_str(), strAlias.c_str());
+    sortSQL = "CASE " + sortSQL; // Not prepare as may contain ' and % etc.
+    sortSQL += PrepareSQL(" ELSE %s END AS %s", strField.c_str(), strAlias.c_str());
   }
 
-  return artistsortSQL;
+  return sortSQL;
 }
 
 std::string CMusicDatabase::AlphanumericSortSQL(const std::string& strField, const SortOrder& sortOrder)
@@ -11037,26 +11041,33 @@ void CMusicDatabase::GetOrderFilter(const std::string& type,
   for (auto& name : orderfields)
   {
     //Add field for adjusted name sorting using sort name and ignoring articles
+    std::string sortSQL;
     if (StringUtils::EndsWith(name, "strArtists") || StringUtils::EndsWith(name, "strArtist"))
     {
-      std::string artistsortSQL;
       if (StringUtils::EndsWith(name, "strArtists"))
-        artistsortSQL = SortnameBuildSQL("artistsortname", sorting.sortAttributes, name,
-                                         "strArtistSort");
+        sortSQL = SortnameBuildSQL("artistsortname", sorting.sortAttributes, name, "strArtistSort");
       else
-        artistsortSQL = SortnameBuildSQL("artistsortname", sorting.sortAttributes, name,
-                                         "strSortName");
-      if (!artistsortSQL.empty())
+        sortSQL = SortnameBuildSQL("artistsortname", sorting.sortAttributes, name, "strSortName");
+      if (!sortSQL.empty())
       {
         name = "artistsortname";
-        filter.AppendField(artistsortSQL); // Add artistsortname as scalar query field
+        filter.AppendField(sortSQL); // Add artistsortname as scalar query field
       }
       // Natural number case insensitve sort
       filter.AppendOrder(AlphanumericSortSQL(name, sorting.sortOrder));
     }
-    else if (StringUtils::EndsWith(name, "strTitle") || 
-             StringUtils::EndsWith(name, "strAlbum") ||
-             StringUtils::EndsWith(name, "strGenres"))
+    else if (StringUtils::EndsWith(name, "strAlbum") || StringUtils::EndsWith(name, "strTitle"))
+    {
+      sortSQL = SortnameBuildSQL("titlesortname", sorting.sortAttributes, name, "");
+      if (!sortSQL.empty())
+      {
+        name = "titlesortname";
+        filter.AppendField(sortSQL); // Add sortname as scalar query field
+      }
+      // Natural number case insensitve sort
+      filter.AppendOrder(AlphanumericSortSQL(name, sorting.sortOrder));
+    }
+    else if (StringUtils::EndsWith(name, "strGenres"))
       // Natural number case insensitve sort
       filter.AppendOrder(AlphanumericSortSQL(name, sorting.sortOrder));
     else
