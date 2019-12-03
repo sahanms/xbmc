@@ -6974,21 +6974,34 @@ std::string CMusicDatabase::SortnameBuildSQL(const std::string& strAlias,
   return sortSQL;
 }
 
-std::string CMusicDatabase::AlphanumericSortSQL(const std::string& strField, const SortOrder& sortOrder)
+std::string CMusicDatabase::AlphanumericSortSQL(const std::string& strField,
+                                                const SortOrder& sortOrder)
 {
   /*
-  Make sort of initial numbers natural, and case insensitive in SQLite.
-  Collation NOCASE ould be more efficient done in table create.
-  MySQL uses case insensitive utf8_general_ci collation defined for tables.
-  Use PrepareSQL to adjust syntax removing NOCASE and add AS UNSIGNED INTEGER
+  In SQLite use custom collation ALPHANUM, see SqliteDatabase::connect. This collation handles
+  natural number order, case sensitivity and locale UFT-8 order for accent char etc.
+  Note this would more efficient done in table create than per query especially once sorting at db
+  is done for all data retrieveal.
+
+  MySQL does not have custom collation, however all tables are defined with case insensitive UFT-8
+  collation - utf8_general_ci. Natural sorting (of string values starting with numbers) is appied
+  in SQL by casting the field as an unsigned integer.
+  No need to PrepareSQL result string as syntax is specific to db type
   */
   std::string DESC;
   if (sortOrder == SortOrderDescending)
     DESC = " DESC";
-  return PrepareSQL("CASE WHEN CAST(%s AS INTEGER) = 0 "
-    "THEN 100000000 ELSE CAST(%s AS INTEGER) END%s, "
-    "%s COLLATE NOCASE%s",
-    strField.c_str(), strField.c_str(), DESC.c_str(), strField.c_str(), DESC.c_str());
+  std::string strSort;
+  if (StringUtils::EqualsNoCase(
+          CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_databaseMusic.type,
+          "mysql"))
+    strSort = PrepareSQL("CASE WHEN CAST(%s AS UNSIGNED INTEGER) = 0 "
+                         "THEN 100000000 ELSE CAST(%s AS UNSIGNED INTEGER) END%s, %s%s",
+                         strField.c_str(), strField.c_str(), DESC.c_str(), strField.c_str(),
+                         DESC.c_str());
+  else
+    strSort = PrepareSQL("%s COLLATE ALPHANUM%s", strField.c_str(), DESC.c_str());
+  return strSort;
 }
 
 void CMusicDatabase::UpdateTables(int version)

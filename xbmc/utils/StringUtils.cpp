@@ -818,6 +818,20 @@ int64_t StringUtils::AlphaNumericCompare(const wchar_t *left, const wchar_t *rig
   return 0; // files are the same
 }
 
+// SQLite collating function, see sqlite3_create_collation
+int StringUtils::AlphaNumericCollation(int nKey1, const void* pKey1, int nKey2, const void* pKey2)
+{
+  int rc;
+  std::string str1{static_cast<const char*>(pKey1), static_cast<size_t>(nKey1)};
+  std::wstring wstr1;
+  g_charsetConverter.utf8ToW(str1, wstr1);
+  std::string str2{static_cast<const char*>(pKey2), static_cast<size_t>(nKey2)};
+  std::wstring wstr2;
+  g_charsetConverter.utf8ToW(str2, wstr2);
+  rc = StringUtils::AlphaNumericCompare(wstr1.c_str(), wstr2.c_str());
+  return rc;
+}
+
 int StringUtils::DateStringToYYYYMMDD(const std::string &dateString)
 {
   std::vector<std::string> days = StringUtils::Split(dateString, '-');
