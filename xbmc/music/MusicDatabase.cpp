@@ -525,7 +525,47 @@ bool CMusicDatabase::UpdateAlbum(CAlbum& album)
   SetLibraryLastUpdated();
 
   const std::string itemSeparator = CServiceBroker::GetSettingsComponent()->GetAdvancedSettings()->m_musicItemSeparator;
+  bool isBoxset = false;
+  bool canBeBoxset = false;
 
+  if (album.bBoxedSet)
+  {
+    isBoxset = IsAlbumBoxset(album.idAlbum);
+    if (!isBoxset)
+    { // not a boxset already so make sure we have enough discs & they all have titles
+      std::string strSQL;
+      strSQL = PrepareSQL("SELECT iDiscTotal FROM album WHERE idAlbum = %i", album.idAlbum);
+      int numDiscs = static_cast<int>(strtol(GetSingleValue(strSQL).c_str(), nullptr, 10));
+      if (numDiscs >= 2)
+      {
+        canBeBoxset = true;
+        int discValue;
+        for (discValue = 1; discValue <= numDiscs; discValue++)
+        {
+          strSQL =
+              PrepareSQL("SELECT DISTINCT strDiscSubtitle FROM song WHERE song.idAlbum = %i AND "
+                         "song.iTrack >> 16 = %i",
+                         album.idAlbum, discValue);
+          std::string currentTitle = GetSingleValue(strSQL);
+          if (currentTitle.empty())
+          {
+            currentTitle = StringUtils::Format("%s %i", g_localizeStrings.Get(427), discValue);
+            strSQL =
+                PrepareSQL("UPDATE song SET strDiscSubtitle = '%s' WHERE song.idAlbum = %i AND "
+                           "song.iTrack >> 16 = %i",
+                           currentTitle.c_str(), album.idAlbum, discValue);
+            ExecuteQuery(strSQL);
+          }
+        }
+      }
+      if (!canBeBoxset && album.bBoxedSet)
+      {
+        CLog::Log(LOGNOTICE, "%s : Album with id [%i] does not meet the requirements for a boxset.",
+                  __FUNCTION__, album.idAlbum);
+        album.bBoxedSet = false;
+      }
+    }
+  }
   UpdateAlbum(album.idAlbum,
               album.strAlbum, album.strMusicBrainzAlbumID,
               album.strReleaseGroupMBID,
@@ -2218,6 +2258,7 @@ CSong CMusicDatabase::GetSongFromDataset(const dbiplus::sql_record* const record
   song.strComment = record->at(offset + song_comment).get_asString();
   song.strMood = record->at(offset + song_mood).get_asString();
   song.bCompilation = record->at(offset + song_bCompilation).get_asInt() == 1;
+  song.strDiscSubtitle = record->at(offset + song_strDiscSubtitle).get_asString();
   // Replay gain data (needed for songs from cuesheets, both separate .cue files and embedded metadata)
   song.replayGain.Set(record->at(offset + song_strReplayGain).get_asString());
   // Get filename with full path
@@ -5862,10 +5903,12 @@ static const translateJSONField JSONtoDBAlbum[] = {
   { "votes",                    "integer", true,  "iVotes",                 "" },
   { "userrating",              "unsigned", true,  "iUserrating",            "" },
   { "year",                     "integer", true,  "iYear",                  "" },
+  { "isboxset",                 "boolean", true,  "bBoxedSet",              "" },
   { "musicbrainzalbumid",        "string", true,  "strMusicBrainzAlbumID",  "" },
   { "displayartist",             "string", true,  "strArtists",             "" }, //strArtistDisp in album table
   { "compilation",              "boolean", true,  "bCompilation",           "" },
   { "releasetype",               "string", true,  "strReleaseType",         "" },
+  { "totaldiscs",               "integer", true,  "iDiscTotal",             "" },
   { "sortartist",                "string", true,  "strArtistSort",          "" },
   { "musicbrainzreleasegroupid", "string", true,  "strReleaseGroupMBID",    "" },
   { "playcount",                "integer", true,  "iTimesPlayed",           "" },  // Scalar subquery in view
@@ -6336,6 +6379,7 @@ static const translateJSONField JSONtoDBSong[] = {
   { "album",                     "string", true,  "strAlbum",               "album.strAlbum AS strAlbum" },
   { "albumreleasetype",          "string", true,  "strAlbumReleaseType",    "album.strReleaseType AS strAlbumReleaseType" },
   { "musicbrainzalbumid",        "string", true,  "strMusicBrainzAlbumID",  "album.strMusicBrainzAlbumID AS strMusicBrainzAlbumID" },
+  { "disctitle",                 "string", true,  "strDiscSubtitle",        "" },
 
   // JOIN fields (multivalue), same order as _JoinToSongFields 
   { "albumartistid",              "array", false, "idAlbumArtist",          "album_artist.idArtist AS idAlbumArtist" },
@@ -10823,10 +10867,8 @@ void CMusicDatabase::SetPropertiesFromAlbum(CFileItem& item, const CAlbum& album
   if (album.iVotes > 0)
     item.SetProperty("album_votes", album.iVotes);
 
-  if (album.bBoxedSet)
-    item.SetProperty("album_bBoxedSet", true); //! @todo Set listItem the same way as totalDiscs ??
+  item.SetProperty("album_isboxset", album.bBoxedSet);
   item.SetProperty("album_totaldiscs", album.iTotalDiscs);
-  item.GetMusicInfoTag()->SetTotalDiscs(album.iTotalDiscs); // sets for ListItem.TotalDiscs
   item.SetProperty("album_releasetype", CAlbum::ReleaseTypeToString(album.releaseType));
 }
 
